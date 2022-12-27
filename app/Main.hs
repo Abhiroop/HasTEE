@@ -3,9 +3,9 @@
 module Main (main) where
 
 import Data.Char
-import Lattice
 import Lib
 import Sec
+import SecIO
 
 {-@
  Non-interferent; Public output is not influenced
@@ -42,30 +42,6 @@ f5 :: (Sec H Char, Int) -> (Sec H Char, Int)
 f5 (sc, _) = (sc, open (fmap ord sc) H)
 
 
-data File s
-
-data SecIO s a
-
-instance Functor (SecIO s)
-instance Applicative (SecIO s)
-instance Monad (SecIO s)
-
-{-@ Look at protected value in the current
-    security level @-}
-value :: Sec s a -> SecIO s a
-value secsa = undefined
-
-readSecIO :: File s' -> SecIO s (Sec s' String)
-readSecIO = undefined
-
-writeSecIO :: File s -> String -> SecIO s ()
-writeSecIO = undefined
-
-plug :: Less sl sh => SecIO sh a -> SecIO sl (Sec sh a)
-plug = undefined
-
-run :: SecIO s a -> IO (Sec s a)
-run = undefined
 
 file1, file2 :: File s
 file1 = undefined
