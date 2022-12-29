@@ -35,6 +35,9 @@ ghc-options:
 
 library:
   source-dirs: src
+  dependencies:
+    - aeson
+    - transformers
 
 executables:
   EnclaveIFC-exe:
@@ -46,6 +49,8 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - EnclaveIFC
+    - aeson
+    - transformers
 
 tests:
   EnclaveIFC-test:

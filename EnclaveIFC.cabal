@@ -25,20 +25,25 @@ source-repository head
 
 library
   exposed-modules:
+      Client
       Lib
+      Server
   other-modules:
       Paths_EnclaveIFC
   hs-source-dirs:
       src
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
-      base >=4.7 && <5
+      aeson
+    , base >=4.7 && <5
+    , transformers
   default-language: Haskell2010
 
 executable EnclaveIFC-exe
   main-is: Main.hs
   other-modules:
       Lattice
+      Program
       Sec
       SecIO
       Paths_EnclaveIFC
@@ -47,7 +52,9 @@ executable EnclaveIFC-exe
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       EnclaveIFC
+    , aeson
     , base >=4.7 && <5
+    , transformers
   default-language: Haskell2010
 
 test-suite EnclaveIFC-test
