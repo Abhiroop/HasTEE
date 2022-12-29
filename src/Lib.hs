@@ -1,6 +1,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, StaticPointers #-}
 module Lib (module Lib) where
 
+import Control.Monad.IO.Class
 import Control.Monad.Trans.State.Strict
 import Data.Aeson
 
@@ -24,7 +25,12 @@ type CallID = Int
 type Method = [JSON] -> IO JSON
 type AppState = (CallID, [(CallID, Method)])
 newtype App a = App (StateT AppState IO a)
-  deriving (Functor, Applicative, Monad)
+  deriving (Functor, Applicative, Monad, MonadIO)
+
+data Done = Done
+
+initAppState :: AppState
+initAppState = (0,[])
 
 -- a util function for JSON
 resFromJSON :: FromJSON a => JSON -> a

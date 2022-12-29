@@ -1,15 +1,17 @@
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# OPTIONS_GHC -Wno-missing-methods #-}
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
 module Client(module Client) where
 
-import Control.Concurrent.MVar
+import Control.Concurrent
 import Control.Monad.IO.Class
 import Control.Monad.Trans.State.Strict
 import Data.Aeson
 import Lib
 
-data Server a = ServerDummy deriving Functor
+data Server a = ServerDummy deriving (Functor, Applicative, Monad, MonadIO)
 data Remote a = Remote CallID [JSON]
 
 (<.>) :: ToJSON a => Remote (a -> b) -> a -> Remote b
@@ -48,6 +50,18 @@ type Nonce = Int
 type ClientState = (Nonce, [(Nonce, (MVar JSON))])
 type Client = StateT ClientState IO -- did not use the continuation monad
 
+initClientState :: ClientState
+initClientState = (0, [])
+
+-- original types had `Client ()`
+-- was it to enforce a `return ()`
+-- relaxing this for now (might revise later)
+
+runClient :: Client a -> App Done
+runClient cl = do
+  v <- liftIO $ evalStateT cl initClientState
+  return $ v `seq` Done
+
 newResult :: Client (Nonce, MVar JSON)
 newResult = do
   (nonce, m) <- get
@@ -59,28 +73,34 @@ onServer :: (FromJSON a) => Remote (Server a) -> Client a
 onServer (Remote identifier args) = do
   (nonce, mv) <- newResult
   liftIO $ webSocketSend $ toJSON (nonce, identifier, reverse args)
-  liftIO $ resFromJSON <$> takeMVar mv
+  {- BLOCKING HAPPENS HERE -}
+  respFromServer <- liftIO (undefined :: IO JSON)
+  {- BLOCING ENDS -}
+  return $ resFromJSON respFromServer
 
 -- we have to choose some library to do an RPC call here
 webSocketSend :: JSON -> IO ()
 webSocketSend _ = return ()
 
 -- the client side event loop
-onMessage :: JSON -> Client ()
-onMessage response = do
-  let (nonce, result) = resFromJSON response
-  (n, m) <- get
-  put (n, removeNonce n m)
-  liftIO $ putMVar (getRunningReq nonce m) result
+-- onMessage :: JSON -> Client ()
+-- onMessage response = do
+--   let (nonce, result) = resFromJSON response
+--   (n, m) <- get
+--   put (n, removeNonce n m)
+--   liftIO $ putMVar (getRunningReq nonce m) result
 
-removeNonce :: Nonce -> [(Nonce, MVar JSON)] -> [(Nonce, MVar JSON)]
-removeNonce _ [] = []
-removeNonce nonce ((n, mv):rest)
-  | nonce == n = rest
-  | otherwise = (n, mv) : removeNonce nonce rest
+-- removeNonce :: Nonce -> [(Nonce, MVar JSON)] -> [(Nonce, MVar JSON)]
+-- removeNonce _ [] = []
+-- removeNonce nonce ((n, mv):rest)
+--   | nonce == n = rest
+--   | otherwise = (n, mv) : removeNonce nonce rest
 
-getRunningReq :: Nonce -> [(Nonce, MVar JSON)] -> MVar JSON
-getRunningReq _ [] = error "Running request not found"
-getRunningReq nonce ((n,mv):rest)
-  | nonce == n = mv
-  | otherwise = getRunningReq nonce rest
+-- getRunningReq :: Nonce -> [(Nonce, MVar JSON)] -> MVar JSON
+-- getRunningReq _ [] = error "Running request not found"
+-- getRunningReq nonce ((n,mv):rest)
+--   | nonce == n = mv
+--   | otherwise = getRunningReq nonce rest
+
+runApp :: App a -> IO a
+runApp (App s) = evalStateT s initAppState
