@@ -5,7 +5,6 @@
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
 module Client(module Client) where
 
-import Control.Concurrent
 import Control.Monad.IO.Class
 import Control.Monad.Trans.State.Strict
 import Data.Aeson
@@ -46,12 +45,12 @@ liftServerIO _ = App $ return ServerDummy
 
 -- The client monad
 -- MVar is used simply to emulate blocking; we might use a different mechanism
-type Nonce = Int
-type ClientState = (Nonce, [(Nonce, (MVar JSON))])
-type Client = StateT ClientState IO -- did not use the continuation monad
+-- type Nonce = Int
+-- type ClientState = (Nonce, [(Nonce, (MVar JSON))])
+type Client = IO
 
-initClientState :: ClientState
-initClientState = (0, [])
+-- initClientState :: ClientState
+-- initClientState = (0, [])
 
 -- original types had `Client ()`
 -- was it to enforce a `return ()`
@@ -59,22 +58,22 @@ initClientState = (0, [])
 
 runClient :: Client a -> App Done
 runClient cl = do
-  v <- liftIO $ evalStateT cl initClientState
+  v <- liftIO cl
   return $ v `seq` Done
 
-newResult :: Client (Nonce, MVar JSON)
-newResult = do
-  (nonce, m) <- get
-  mv <- liftIO newEmptyMVar
-  put (nonce + 1, (nonce, mv):m)
-  return (nonce, mv)
+-- newResult :: Client (Nonce, MVar JSON)
+-- newResult = do
+--   (nonce, m) <- get
+--   mv <- liftIO newEmptyMVar
+--   put (nonce + 1, (nonce, mv):m)
+  -- return (nonce, mv)
 
 onServer :: (FromJSON a) => Remote (Server a) -> Client a
 onServer (Remote identifier args) = do
-  (nonce, mv) <- newResult
-  liftIO $ webSocketSend $ toJSON (nonce, identifier, reverse args)
+  -- (nonce, mv) <- newResult
+  webSocketSend $ toJSON (identifier, reverse args)
   {- BLOCKING HAPPENS HERE -}
-  respFromServer <- liftIO (undefined :: IO JSON)
+  respFromServer <- (undefined :: IO JSON)
   {- BLOCING ENDS -}
   return $ resFromJSON respFromServer
 
