@@ -10,6 +10,7 @@ import Control.Monad.IO.Class
 import Control.Monad.Trans.State.Strict
 import Data.Binary(Binary, encode, decode)
 import Data.ByteString.Lazy(ByteString)
+import Network.Simple.TCP
 
 import App
 
@@ -41,10 +42,6 @@ instance (Binary a) => Remotable (Server a) where
 instance (Binary a, Remotable b) => Remotable (a -> b) where
   mkRemote f = \(x:xs) -> mkRemote (f $ decode x) xs
 
--- we have to choose some library to do an RPC call here
-webSocketSend :: ByteString -> IO ()
-webSocketSend _ = return ()
-
 data Client a = ClientDummy deriving (Functor, Applicative, Monad, MonadIO)
 
 runClient :: Client a -> App Done
@@ -53,21 +50,23 @@ runClient _ = return Done
 onServer :: (Binary a) => Remote (Server a) -> Client a
 onServer _ = ClientDummy
 
-{-@ This is where the server can have an event loop.
-    It can asynchronously wait for multiple requests. @-}
+{-@ The server's event loop. @-}
 runApp :: App a -> IO a
 runApp (App s) = do
   (a, (_, vTable)) <- runStateT s initAppState
   {- BLOCKING HERE -}
-  let incomingRequest = undefined :: ByteString
+  _ <- serve (Host localhost) connectPort $
+    \(connectionSocket, remoteAddr) -> do
+      -- debug log
+      putStrLn $ "TCP connection established from " ++ show remoteAddr
+      req <- readTCPSocket connectionSocket
+      onEvent vTable req connectionSocket
   {- BLOCKING ENDS -}
-  onEvent vTable incomingRequest
   return a -- the a is irrelevant
 
-
-onEvent :: [(CallID, Method)] -> ByteString -> IO ()
-onEvent mapping incoming = do
+onEvent :: [(CallID, Method)] -> ByteString -> Socket -> IO ()
+onEvent mapping incoming socket = do
   let (identifier, args) = decode incoming :: (CallID, [ByteString])
       Just f = lookup identifier mapping
   result <- f args
-  webSocketSend $ encode result
+  sendLazy socket (createPayload result)
