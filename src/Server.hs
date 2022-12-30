@@ -8,8 +8,10 @@ module Server(module Server) where
 
 import Control.Monad.IO.Class
 import Control.Monad.Trans.State.Strict
-import Data.Aeson
-import Lib
+import Data.Binary(Binary, encode, decode)
+import Data.ByteString.Lazy(ByteString)
+
+import App
 
 -- the Reader was not being used
 type Server = IO
@@ -26,21 +28,21 @@ remote f = App $ do
   put (next_id + 1, (next_id, mkRemote f) : remotes)
   return RemoteDummy
 
-(<.>) :: ToJSON a => Remote (a -> b) -> a -> Remote b
+(<.>) :: Binary a => Remote (a -> b) -> a -> Remote b
 (<.>) = error "Access to client not allowed"
 
 
 class Remotable a where
-  mkRemote :: a -> ([JSON] -> Server JSON)
+  mkRemote :: a -> ([ByteString] -> Server ByteString)
 
-instance (ToJSON a) => Remotable (Server a) where
-  mkRemote m = \_ -> fmap toJSON m
+instance (Binary a) => Remotable (Server a) where
+  mkRemote m = \_ -> fmap encode m
 
-instance (FromJSON a, Remotable b) => Remotable (a -> b) where
-  mkRemote f = \(x:xs) -> mkRemote (f $ resFromJSON x) xs
+instance (Binary a, Remotable b) => Remotable (a -> b) where
+  mkRemote f = \(x:xs) -> mkRemote (f $ decode x) xs
 
 -- we have to choose some library to do an RPC call here
-webSocketSend :: JSON -> IO ()
+webSocketSend :: ByteString -> IO ()
 webSocketSend _ = return ()
 
 data Client a = ClientDummy deriving (Functor, Applicative, Monad, MonadIO)
@@ -48,7 +50,7 @@ data Client a = ClientDummy deriving (Functor, Applicative, Monad, MonadIO)
 runClient :: Client a -> App Done
 runClient _ = return Done
 
-onServer :: (FromJSON a) => Remote (Server a) -> Client a
+onServer :: (Binary a) => Remote (Server a) -> Client a
 onServer _ = ClientDummy
 
 {-@ This is where the server can have an event loop.
@@ -57,15 +59,15 @@ runApp :: App a -> IO a
 runApp (App s) = do
   (a, (_, vTable)) <- runStateT s initAppState
   {- BLOCKING HERE -}
-  let incomingRequest = undefined :: JSON
+  let incomingRequest = undefined :: ByteString
   {- BLOCKING ENDS -}
   onEvent vTable incomingRequest
   return a -- the a is irrelevant
 
 
-onEvent :: [(CallID, Method)] -> JSON -> IO ()
+onEvent :: [(CallID, Method)] -> ByteString -> IO ()
 onEvent mapping incoming = do
-  let (nonce, identifier, args) = resFromJSON incoming :: (Int, CallID, [JSON])
+  let (identifier, args) = decode incoming :: (CallID, [ByteString])
       Just f = lookup identifier mapping
   result <- f args
-  webSocketSend $ toJSON (nonce, result)
+  webSocketSend $ encode result

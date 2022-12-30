@@ -2,7 +2,7 @@
 module Program where
 
 import Data.Char
-import Lib
+import App
 import Sec
 import SecIO
 

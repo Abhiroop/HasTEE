@@ -3,7 +3,7 @@ module Main (main) where
 import Control.Monad.IO.Class
 import Data.IORef
 
-import Lib
+import App
 import Client
 --import Server
 

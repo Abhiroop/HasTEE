@@ -6,7 +6,7 @@ cabal-version: 1.12
 
 name:           EnclaveIFC
 version:        0.1.0.0
-description:    Please see the README on GitHub at <https://github.com/githubuser/EnclaveIFC#readme>
+description:    Please see the README on GitHub at <https://github.com/Abhiroop/EnclaveIFC#readme>
 homepage:       https://github.com/Abhiroop/EnclaveIFC#readme
 bug-reports:    https://github.com/Abhiroop/EnclaveIFC/issues
 author:         Author name here
@@ -25,8 +25,8 @@ source-repository head
 
 library
   exposed-modules:
+      App
       Client
-      Lib
       Server
   other-modules:
       Paths_EnclaveIFC
@@ -34,8 +34,9 @@ library
       src
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
-      aeson
-    , base >=4.7 && <5
+      base >=4.7 && <5
+    , binary
+    , bytestring
     , transformers
   default-language: Haskell2010
 
@@ -52,8 +53,9 @@ executable EnclaveIFC-exe
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       EnclaveIFC
-    , aeson
     , base >=4.7 && <5
+    , binary
+    , bytestring
     , transformers
   default-language: Haskell2010
 

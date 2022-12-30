@@ -7,15 +7,17 @@ module Client(module Client) where
 
 import Control.Monad.IO.Class
 import Control.Monad.Trans.State.Strict
-import Data.Aeson
-import Lib
+import Data.ByteString.Lazy(ByteString)
+import Data.Binary(Binary, encode, decode)
+
+import App
 
 data Server a = ServerDummy deriving (Functor, Applicative, Monad, MonadIO)
-data Remote a = Remote CallID [JSON]
+data Remote a = Remote CallID [ByteString]
 
-(<.>) :: ToJSON a => Remote (a -> b) -> a -> Remote b
+(<.>) :: Binary a => Remote (a -> b) -> a -> Remote b
 (Remote identifier args) <.> arg =
-  Remote identifier (toJSON arg : args)
+  Remote identifier (encode arg : args)
 
 {- The Remotable a constraint is necessary for the Server type -}
 remote :: (Remotable a) => a -> App (Remote a)
@@ -25,17 +27,17 @@ remote _ = App $ do
   return $ Remote next_id []
 
 class Remotable a where
-  mkRemote :: a -> ([JSON] -> Server JSON)
+  mkRemote :: a -> ([ByteString] -> Server ByteString)
 
-instance (ToJSON a) => Remotable (Server a) where
-  mkRemote m = \_ -> fmap toJSON m
+instance (Binary a) => Remotable (Server a) where
+  mkRemote m = \_ -> fmap encode m
 
-instance (FromJSON a, Remotable b) => Remotable (a -> b) where
-  mkRemote f = \(x:xs) -> mkRemote (f $ getRes $ fromJSON x) xs
-    where
-      getRes :: Result a -> a
-      getRes (Success a) = a
-      getRes (Error str) = error $ "Runtime error while parsing JSON: " <> str
+instance (Binary a, Remotable b) => Remotable (a -> b) where
+  mkRemote f = \(x:xs) -> mkRemote (f $ decode x) xs
+    -- where
+    --   getRes :: Result a -> a
+    --   getRes (Success a) = a
+    --   getRes (Error str) = error $ "Runtime error while parsing JSON: " <> str
 
 
 liftServerIO :: IO a -> App (Server a)
@@ -68,17 +70,17 @@ runClient cl = do
 --   put (nonce + 1, (nonce, mv):m)
   -- return (nonce, mv)
 
-onServer :: (FromJSON a) => Remote (Server a) -> Client a
+onServer :: (Binary a) => Remote (Server a) -> Client a
 onServer (Remote identifier args) = do
   -- (nonce, mv) <- newResult
-  webSocketSend $ toJSON (identifier, reverse args)
+  webSocketSend $ encode (identifier, reverse args)
   {- BLOCKING HAPPENS HERE -}
-  respFromServer <- (undefined :: IO JSON)
+  respFromServer <- (undefined :: IO ByteString)
   {- BLOCING ENDS -}
-  return $ resFromJSON respFromServer
+  return $ decode respFromServer
 
 -- we have to choose some library to do an RPC call here
-webSocketSend :: JSON -> IO ()
+webSocketSend :: ByteString -> IO ()
 webSocketSend _ = return ()
 
 -- the client side event loop
