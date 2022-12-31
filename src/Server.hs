@@ -14,7 +14,9 @@ import Network.Simple.TCP
 
 import App
 
--- the Reader was not being used
+import qualified Data.ByteString.Lazy as B
+
+
 type Server = IO
 data Remote a = RemoteDummy
 
@@ -69,4 +71,16 @@ onEvent mapping incoming socket = do
   let (identifier, args) = decode incoming :: (CallID, [ByteString])
       Just f = lookup identifier mapping
   result <- f args
-  sendLazy socket (createPayload result)
+  sendLazy socket (B.append (msgSize result) result) -- See NOTE 1
+  where
+    msgSize res = encode $ B.length res
+
+-- NOTE 1
+-- We do not use `createPayload` because as a first step it
+-- encodes the message body to a ByteString. In case of the
+-- server the `result` is already a ByteString. So it further
+-- encodes the ByteString and gives a wrong result.
+-- We can modify the `createPayload` function so that depending
+-- on the value of some identifier term that we send, it decides
+-- to encode or not encode the message body but then the type
+-- will become an actual dependent type. (Keep it simple!)

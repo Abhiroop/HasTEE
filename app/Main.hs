@@ -1,11 +1,16 @@
+{-# LANGUAGE CPP #-}
 module Main (main) where
 
 import Control.Monad.IO.Class
 import Data.IORef
 
 import App
+
+#ifdef ENCLAVE
+import Server
+#else
 import Client
---import Server
+#endif
 
 
 app :: App Done

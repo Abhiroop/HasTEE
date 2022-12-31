@@ -54,6 +54,7 @@ connectPort = "8000"
      The payload comprise of:
      8 bytes message length followed by n bytes message body
      where n :: Int64 (from the length function in `bytestring`)
+
 @-}
 createPayload :: Binary a => a -> ByteString
 createPayload msg = append bytstr msgBody
