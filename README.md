@@ -17,7 +17,20 @@ cabal run -f enclave
 cabal run
 ```
 
+Follow the above order - run server first and then the client. The server is stateful and can be tested by running the server first and then calling the client repeatedly for the program in `Main.hs`.
+
+
+#### Installed Binary Location
+
+```
+cabal exec which EnclaveIFC-exe
+```
+
+
 #### Using stack
+
+Very hard (or impossible) to make the latest `stack` pick up a custom GHC because of the snapshot mechanism (perhaps that requires all the necessary packages be compiled with the custom ghc). Approaches in this thread https://github.com/commercialhaskell/stack/issues/725#issuecomment-364624897 is no longer functional in the latest `stack incarnations.
+
 ```
 -- Build and run the server (the flag is called `enclave`)
 stack build --flag EnclaveIFC:enclave
@@ -27,10 +40,3 @@ stack build --flag EnclaveIFC:enclave
 stack run EnclaveIFC-exe
 ```
 
-Follow the above order - run server first and then the client. The server is stateful and can be tested by running the server first and then calling the client repeatedly for the program in `Main.hs`.
-
-#### Installed Binary Location
-
-```
-cabal exec which EnclaveIFC-exe
-```
