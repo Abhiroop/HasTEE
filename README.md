@@ -6,7 +6,16 @@ Can we use IFC policies to stop enclave programs from doing silly things?
 ### Building
 
 The executable supports conditional compilation and can compile into 2 binaries
+#### Using cabal
+```
+-- For the server
+cabal run EnclaveIFC-exe -f enclave
 
+-- For the client
+cabal run EnclaveIFC-exe
+```
+
+#### Using stack
 ```
 -- Build and run the server (the flag is called `enclave`)
 stack build --flag EnclaveIFC:enclave
