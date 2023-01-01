@@ -9,10 +9,10 @@ The executable supports conditional compilation and can compile into 2 binaries
 #### Using cabal
 ```
 -- For the server
-cabal run EnclaveIFC-exe -f enclave
+cabal run -f enclave
 
 -- For the client
-cabal run EnclaveIFC-exe
+cabal run
 ```
 
 #### Using stack
