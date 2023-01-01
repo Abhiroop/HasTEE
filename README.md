@@ -28,3 +28,9 @@ stack run EnclaveIFC-exe
 ```
 
 Follow the above order - run server first and then the client. The server is stateful and can be tested by running the server first and then calling the client repeatedly for the program in `Main.hs`.
+
+#### Installed Binary Location
+
+```
+cabal exec which EnclaveIFC-exe
+```
