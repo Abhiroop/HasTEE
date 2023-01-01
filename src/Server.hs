@@ -11,6 +11,7 @@ import Control.Monad.Trans.State.Strict
 import Data.Binary(Binary, encode, decode)
 import Data.ByteString.Lazy(ByteString)
 import Network.Simple.TCP
+import System.IO(hFlush, stdout)
 
 import App
 
@@ -61,6 +62,7 @@ runApp (App s) = do
     \(connectionSocket, remoteAddr) -> do
       -- debug log
       putStrLn $ "TCP connection established from " ++ show remoteAddr
+      hFlush stdout -- Gramine prints only if stdout is flushed
       req <- readTCPSocket connectionSocket
       onEvent vTable req connectionSocket
   {- BLOCKING ENDS -}
