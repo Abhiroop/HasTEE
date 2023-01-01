@@ -1,0 +1,2 @@
+packages: ./*.cabal
+with-compiler: /home/abhir00p/ghc-8.8.2/inplace/bin/ghc-stage2
