@@ -5,6 +5,8 @@ Can we use IFC policies to stop enclave programs from doing silly things?
 
 ### Building
 
+NOTE: For building this on any machine, remove the `cabal.project` file. The current `cabal.project` expects the trusted GHC at a particular location.
+
 The executable supports conditional compilation and can compile into 2 binaries
 #### Using cabal
 ```
