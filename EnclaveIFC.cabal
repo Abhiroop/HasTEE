@@ -31,6 +31,7 @@ library
   exposed-modules:
       App
       Client
+      Security.Lattice
       Server
   other-modules:
       Paths_EnclaveIFC
