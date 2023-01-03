@@ -1,5 +1,5 @@
 {-# LANGUAGE CPP #-}
-module Main (main) where
+module PasswordChecker (main) where
 
 import Control.Monad.IO.Class
 
