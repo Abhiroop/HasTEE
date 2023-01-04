@@ -14,13 +14,6 @@ import Client
 pwdChkr :: Server String -> String -> Server Bool
 pwdChkr pwd guess = fmap (== guess) pwd
 
-{- What can go wrong?
-   pwdChkr pwd guess = do
-      p <- pwd
-sendToWorld p -- the attack
-      return (guess == p)
--}
-
 
 passwordChecker :: App Done
 passwordChecker = do
