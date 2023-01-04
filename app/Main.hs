@@ -11,17 +11,24 @@ import Server
 import Client
 #endif
 
-import Library
+count :: Ref Int -> Server Int
+count ref = do
+    v <- readRef ref
+    writeRef ref $ v + 1
+    return v
 
 app :: App Done
 app = do
-  count <- setup
+  remoteRef <- liftNewRef 0 :: App (Ref Int)
+  count <- remote $ count remoteRef
+
+  hatch <- ntimes 3 onServer
 
   runClient $ do
-    v1 <- count 
-    v2 <- count
-    v3 <- count
-    v4 <- count
+    v1 <- hatch count
+    v2 <- hatch count
+    v3 <- hatch count
+    v4 <- hatch count
     liftIO $ putStrLn $ show v1
     liftIO $ putStrLn $ show v2
     liftIO $ putStrLn $ show v3
