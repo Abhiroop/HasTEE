@@ -1,7 +1,7 @@
 {-# LANGUAGE CPP #-}
 module PasswordChecker (main) where
 
-import Control.Monad.IO.Class
+import Control.Monad.IO.Class(liftIO)
 
 import App
 
@@ -14,9 +14,10 @@ import Client
 pwdChkr :: Server String -> String -> Server Bool
 pwdChkr pwd guess = fmap (== guess) pwd
 
+
 passwordChecker :: App Done
 passwordChecker = do
-  paswd <- liftServerIO (return "secret") :: App (Server String) -- See NOTE 1
+  paswd <- liftServerIO (return "secret") :: App (Server String) -- see NOTE 1
   serverFunc <- remote $ pwdChkr paswd
   runClient $ do
     liftIO $ putStrLn "Enter your password"

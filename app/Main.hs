@@ -1,7 +1,7 @@
 {-# LANGUAGE CPP #-}
 module Main (main) where
 
-import Control.Monad.IO.Class
+import Control.Monad.IO.Class(liftIO)
 
 import App
 
