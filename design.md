@@ -23,7 +23,7 @@ What can go wrong?
 ```haskell
 pwdChkr pwd guess = do
    p <- pwd
-   sendToWorld p -- the attack (think of the offline dictionary attack)
+   liftIO $ sendToWorld p -- the attack (think of the offline dictionary attack)
    return (guess == p)
 ```
 
