@@ -12,7 +12,7 @@ import Data.Binary(Binary, encode, decode)
 import Network.Simple.TCP
 import App
 
-data Ref a
+data Ref a = RefDummy
 data Server a = ServerDummy deriving (Functor, Applicative, Monad)
 data Remote a = Remote CallID [ByteString]
 
@@ -39,8 +39,8 @@ instance (Binary a, Remotable b) => Remotable (a -> b) where
 serverConstant :: a -> App (Server a)
 serverConstant _ = return ServerDummy
 
-liftNewRef :: a -> App (Server (Ref a))
-liftNewRef _ = return ServerDummy
+liftNewRef :: a -> App (Ref a)
+liftNewRef _ = return RefDummy
 
 newRef :: a -> Server (Ref a)
 newRef _ = ServerDummy
@@ -50,7 +50,6 @@ readRef _ = ServerDummy
 
 writeRef :: Ref a -> a -> Server ()
 writeRef _ _ = ServerDummy
-
 
 
 type Client = IO

@@ -38,12 +38,12 @@ instance Monad Server where
 data Remote a = RemoteDummy
 
 serverConstant :: a -> App (Server a)
-serverConstant a = return (return a)
+serverConstant = return . return
 
-liftNewRef :: a -> App (Server (Ref a))
-liftNewRef a = App $ do
-  x <- liftIO (newIORef a)
-  return (return x)
+liftNewRef :: a -> App (Ref a)
+liftNewRef a = do
+  r <- liftIO $ newIORef a
+  return r
 
 newRef :: a -> Server (Ref a)
 newRef x = Server $ newIORef x
