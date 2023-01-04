@@ -13,7 +13,7 @@ import Network.Simple.TCP
 import App
 
 data Ref a
-data Server a = ServerDummy deriving (Functor, Applicative, Monad, MonadIO)
+data Server a = ServerDummy deriving (Functor, Applicative, Monad)
 data Remote a = Remote CallID [ByteString]
 
 (<.>) :: Binary a => Remote (a -> b) -> a -> Remote b
