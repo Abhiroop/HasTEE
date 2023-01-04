@@ -71,5 +71,18 @@ onServer (Remote identifier args) = do
     return $ decode resp
   {- SENDING ENDS -}
 
+ntimes :: Binary a => Int -> (Remote (Server a) -> Client a) -> App (Remote (Server a) -> Client (Maybe a))
+ntimes n h = do
+  r <- liftNewRef n
+  check <- remote $ do
+    v <- readRef r
+    writeRef r $ v - 1
+    return (v > 0)
+  return $ \sa -> do
+    c <- onServer check
+    if c
+      then Just <$> h sa
+      else return Nothing
+
 runApp :: App a -> IO a
 runApp (App s) = evalStateT s initAppState

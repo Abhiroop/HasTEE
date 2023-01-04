@@ -1,5 +1,5 @@
 {-# LANGUAGE CPP #-}
-module Main (main) where
+module Main where
 
 import Control.Monad.IO.Class(liftIO)
 
@@ -11,22 +11,25 @@ import Server
 import Client
 #endif
 
-pwdChkr :: Server String -> String -> Server Bool
-pwdChkr pwd guess = fmap (== guess) pwd
+import Library
 
+app :: App Done
+app = do
+  count <- setup
 
-passwordChecker :: App Done
-passwordChecker = do
-  paswd <- serverConstant "secret" :: App (Server String)
-  serverFunc <- remote $ pwdChkr paswd
   runClient $ do
-    liftIO $ putStrLn "Enter your password"
-    userInput <- liftIO getLine
-    res <- onServer (serverFunc <.> userInput)
-    liftIO $ putStrLn $ "Your login attempt returned " <> (show res)
+    v1 <- count 
+    v2 <- count
+    v3 <- count
+    v4 <- count
+    liftIO $ putStrLn $ show v1
+    liftIO $ putStrLn $ show v2
+    liftIO $ putStrLn $ show v3
+    liftIO $ putStrLn $ show v4
+--    liftIO $ putStrLn $ "You are visitor number #" ++ show visitors
 
 
 main :: IO ()
 main = do
-  res <- runApp passwordChecker
+  res <- runApp app
   return $ res `seq` ()

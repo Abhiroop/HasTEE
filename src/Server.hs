@@ -96,6 +96,18 @@ runApp (App s) = do
   {- BLOCKING ENDS -}
   return a -- the a is irrelevant
 
+-- ntimes :: Binary a => Int -> (Remote (Server a) -> Client a) -> App (Remote (Server a) -> Client (Maybe a))
+-- ntimes _ _ = return $ \_ -> ClientDummy
+
+ntimes :: Binary a => Int -> (Remote (Server a) -> Client a) -> App (Remote (Server a) -> Client (Maybe a))
+ntimes n _ = do
+  r <- liftNewRef n
+  _ <- remote $ do
+    v <- readRef r
+    writeRef r $ v - 1
+    return (v > 0)
+  return $ \_ -> ClientDummy
+
 onEvent :: [(CallID, Method)] -> ByteString -> Socket -> IO ()
 onEvent mapping incoming socket = do
   let (identifier, args) = decode incoming :: (CallID, [ByteString])
