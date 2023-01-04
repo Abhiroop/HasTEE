@@ -41,9 +41,9 @@ serverConstant :: a -> App (Server a)
 serverConstant a = return (return a)
 
 liftNewRef :: a -> App (Server (Ref a))
-liftNewRef a = App $ return $ Server $ do
-  r <- newIORef a
-  return r
+liftNewRef a = App $ do
+  x <- liftIO (newIORef a)
+  return (return x)
 
 newRef :: a -> Server (Ref a)
 newRef x = Server $ newIORef x
