@@ -1,6 +1,5 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE TypeSynonymInstances #-}
 {-# OPTIONS_GHC -Wno-missing-methods #-}
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
@@ -10,6 +9,7 @@ import Control.Monad.IO.Class
 import Control.Monad.Trans.State.Strict
 import Data.Binary(Binary, encode, decode)
 import Data.ByteString.Lazy(ByteString)
+import Data.IORef
 import Network.Simple.TCP
 import System.IO(hFlush, stdout)
 
@@ -17,19 +17,47 @@ import App
 
 import qualified Data.ByteString.Lazy as B
 
+type Ref a = IORef a
+newtype Server a = Server (IO a)
 
-type Server = IO
+instance Functor (Server) where
+  fmap f (Server x) = Server $ fmap f x
+
+instance Applicative Server where
+  pure x = Server (pure x)
+  Server f <*> Server a = Server $ f <*> a
+
+instance Monad Server where
+  return = pure
+  Server ma >>= k = Server $ do
+    a <- ma
+    let Server ka = k a
+    ka
+
+
 data Remote a = RemoteDummy
 
-liftServerIO :: IO a -> App (Server a)
-liftServerIO m = App $ do
-  x <- liftIO m
-  return (return x)
+serverConstant :: a -> App (Server a)
+serverConstant a = return (return a)
+
+liftNewRef :: a -> App (Server (Ref a))
+liftNewRef a = App $ return $ Server $ do
+  r <- newIORef a
+  return r
+
+newRef :: a -> Server (Ref a)
+newRef x = Server $ newIORef x
+
+readRef :: Ref a -> Server a
+readRef ref = Server $ readIORef ref
+
+writeRef :: Ref a -> a -> Server ()
+writeRef ref = Server . writeIORef ref
 
 remote :: (Remotable a) => a -> App (Remote a)
 remote f = App $ do
   (next_id, remotes) <- get
-  put (next_id + 1, (next_id, mkRemote f) : remotes)
+  put (next_id + 1, (next_id, \bs -> let Server n = mkRemote f bs in n) : remotes)
   return RemoteDummy
 
 (<.>) :: Binary a => Remote (a -> b) -> a -> Remote b
