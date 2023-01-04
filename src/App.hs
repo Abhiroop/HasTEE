@@ -10,8 +10,14 @@ import Network.Simple.TCP
 
 {-@ The EnclaveIFC API for programmers
 
--- use the below 2 function to describe your server API
-liftServerIO :: IO a -> App (Server a)
+-- use the below functions to describe your server API
+
+-- references
+liftNewRef :: a -> App (Ref a)
+newRef     :: a -> Server (Ref a)
+readRef    :: Ref a -> Server a
+writeRef   :: Ref a -> a -> Server ()
+-- closures
 remote :: Remotable a => a -> App (Remote a)
 
 -- use the below function to introduce the Client monad
