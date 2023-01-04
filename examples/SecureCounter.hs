@@ -1,5 +1,5 @@
 {-# LANGUAGE CPP #-}
-module Main (main) where
+module SecureCounter (main) where
 
 -- copy and paste this program into the Main.hs file
 
