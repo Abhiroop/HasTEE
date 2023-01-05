@@ -3,6 +3,7 @@ module App (module App) where
 
 import Control.Monad.IO.Class
 import Control.Monad.Trans.State.Strict
+
 import Data.ByteString.Lazy(ByteString, append, length, fromStrict)
 import Data.Binary(Binary, encode, decode)
 import Data.Maybe(fromMaybe)
@@ -12,11 +13,13 @@ import Network.Simple.TCP
 
 -- use the below functions to describe your server API
 
--- references
+-- mutable references
 liftNewRef :: a -> App (Ref a)
-newRef     :: a -> Server (Ref a)
+newRef :: a -> Server (Ref a)
 readRef    :: Ref a -> Server a
 writeRef   :: Ref a -> a -> Server ()
+-- immutable value
+serverConstant :: a -> App (Server a)
 -- closures
 remote :: Remotable a => a -> App (Remote a)
 
