@@ -9,6 +9,7 @@ import Control.Monad.IO.Class
 import Control.Monad.Trans.State.Strict
 import Data.ByteString.Lazy(ByteString)
 import Data.Binary(Binary, encode, decode)
+import Data.IORef
 import Network.Simple.TCP
 import App
 
@@ -71,18 +72,19 @@ onServer (Remote identifier args) = do
     return $ decode resp
   {- SENDING ENDS -}
 
-ntimes :: Binary a => Int -> (Remote (Server a) -> Client a) -> App (Remote (Server a) -> Client (Maybe a))
+
+ntimes :: Binary a
+       => Int -> (Remote (Server a) -> Client a)
+       -> App (Remote (Server a) -> Client (Maybe a))
 ntimes n h = do
-  r <- liftNewRef n
-  check <- remote $ do
-    v <- readRef r
-    writeRef r $ v - 1
-    return (v > 0)
+  r <- liftIO $ newIORef n
   return $ \sa -> do
-    c <- onServer check
-    if c
-      then Just <$> h sa
-      else return Nothing
+    k <- readIORef r
+    if k <= 0
+    then return Nothing
+    else do
+      writeIORef r (k - 1)
+      Just <$> h sa
 
 runApp :: App a -> IO a
 runApp (App s) = evalStateT s initAppState

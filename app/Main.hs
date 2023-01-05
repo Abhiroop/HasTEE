@@ -11,16 +11,13 @@ import Server
 import Client
 #endif
 
-count :: Ref Int -> Server Int
-count ref = do
-    v <- readRef ref
-    writeRef ref $ v + 1
-    return v
-
 app :: App Done
 app = do
   remoteRef <- liftNewRef 0 :: App (Ref Int)
-  count <- remote $ count remoteRef
+  count <- remote $ do
+    v <- readRef remoteRef
+    writeRef remoteRef $ v + 1
+    return v
 
   hatch <- ntimes 3 onServer
 
