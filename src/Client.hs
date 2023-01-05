@@ -77,14 +77,16 @@ ntimes :: Binary a
        => Int -> (Remote (Server a) -> Client a)
        -> App (Remote (Server a) -> Client (Maybe a))
 ntimes n h = do
-  r <- liftIO $ newIORef n
+  r <- liftNewRef n
+  check <- remote $ do
+    v <- readRef r
+    writeRef r $ v - 1
+    return (v > 0)
   return $ \sa -> do
-    k <- readIORef r
-    if k <= 0
-    then return Nothing
-    else do
-      writeIORef r (k - 1)
-      Just <$> h sa
+    c <- onServer check
+    if c
+      then Just <$> h sa
+      else return Nothing
 
 runApp :: App a -> IO a
 runApp (App s) = evalStateT s initAppState
