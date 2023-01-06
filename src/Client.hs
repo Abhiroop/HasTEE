@@ -9,7 +9,6 @@ import Control.Monad.IO.Class
 import Control.Monad.Trans.State.Strict
 import Data.ByteString.Lazy(ByteString)
 import Data.Binary(Binary, encode, decode)
-import Data.IORef
 import Network.Simple.TCP
 import App
 
