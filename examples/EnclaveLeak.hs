@@ -1,5 +1,5 @@
 {-# LANGUAGE CPP #-}
-module Main where
+module EnclaveLeak where
 
 import Control.Monad.IO.Class(liftIO)
 import Data.List(genericLength)
