@@ -113,9 +113,13 @@ onEvent mapping incoming socket = do
   let (identifier, args) = decode incoming :: (CallID, [ByteString])
       Just f = lookup identifier mapping
   result <- f args
-  sendLazy socket (B.append (msgSize result) result) -- See NOTE 1
+  let res = handleVoidTy result -- the () type cannot be sent over wire
+  sendLazy socket (B.append (msgSize res) res) -- See NOTE 1
   where
-    msgSize res = encode $ B.length res
+    msgSize r = encode $ B.length r
+    handleVoidTy r = if (B.length r == 0) -- the () type has msg length 0
+                     then encode '\0'
+                     else r
 
 -- NOTE 1
 -- We do not use `createPayload` because as a first step it
