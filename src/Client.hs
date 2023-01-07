@@ -10,7 +10,10 @@ import Control.Monad.Trans.State.Strict
 import Data.ByteString.Lazy(ByteString)
 import Data.Binary(Binary, encode, decode)
 import Network.Simple.TCP
+import Security.Sec
+import Security.Lattice
 import App
+
 
 data Ref a = RefDummy
 data Server a = ServerDummy deriving (Functor, Applicative, Monad)
@@ -36,19 +39,19 @@ instance (Binary a) => Remotable (Server a) where
 instance (Binary a, Remotable b) => Remotable (a -> b) where
   mkRemote f = \(x:xs) -> mkRemote (f $ decode x) xs
 
-serverConstant :: a -> App (Server a)
+serverConstant :: a -> App (Server (Sec H a))
 serverConstant _ = return ServerDummy
 
-liftNewRef :: a -> App (Ref a)
+liftNewRef :: a -> App (Ref (Sec H a))
 liftNewRef _ = return RefDummy
 
-newRef :: a -> Server (Ref a)
+newRef :: a -> Server (Ref (Sec H a))
 newRef _ = ServerDummy
 
-readRef :: Ref a -> Server a
+readRef :: Ref (Sec H a) -> Server (Sec H a)
 readRef _ = ServerDummy
 
-writeRef :: Ref a -> a -> Server ()
+writeRef :: Ref (Sec H a) -> a -> Server ()
 writeRef _ _ = ServerDummy
 
 
@@ -71,21 +74,6 @@ onServer (Remote identifier args) = do
     return $ decode resp
   {- SENDING ENDS -}
 
-
-ntimes :: Binary a
-       => Int -> (Remote (Server a) -> Client a)
-       -> App (Remote (Server a) -> Client (Maybe a))
-ntimes n h = do
-  r <- liftNewRef n
-  check <- remote $ do
-    v <- readRef r
-    writeRef r $ v - 1
-    return (v > 0)
-  return $ \sa -> do
-    c <- onServer check
-    if c
-      then Just <$> h sa
-      else return Nothing
 
 runApp :: App a -> IO a
 runApp (App s) = evalStateT s initAppState

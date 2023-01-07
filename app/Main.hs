@@ -5,7 +5,8 @@ import Control.Monad.IO.Class(liftIO)
 import Data.List(genericLength)
 import GHC.Float(int2Float)
 import App
-
+import Security.Lattice
+import Security.Sec
 
 #ifdef ENCLAVE
 import Server
@@ -15,27 +16,27 @@ import Client
 
 
 
-getData :: Ref [Int] -> Int -> Server Int
+getData :: Ref (Sec H [Int]) -> Int -> Server Int
 getData secret idx = do
-  s <- readRef secret
+  sech <- readRef secret
+  let s = open (declassify (sech)) L
   return (s !! idx)
 
-releaseAvg :: Ref Bool -> Server Bool
-releaseAvg bool = do
-  writeRef bool True
-  r <- readRef bool
-  return r
+releaseAvg :: Ref (Sec H Bool) -> Server ()
+releaseAvg bool = writeRef bool True
 
 doAvg :: [Int] -> Float
 doAvg xs = realToFrac (sum xs) / genericLength xs
 
-getAvg :: Ref Bool -> Ref [Int] -> Server Float
+getAvg :: Ref (Sec H Bool) -> Ref (Sec H [Int]) -> Server Float
 getAvg bool secret = do
-  b <- readRef bool
+  b' <- readRef bool
+  let b = open (declassify b') L
   if b
   then do
     s <- readRef secret
-    let avg = doAvg s
+    let s' = open (declassify s) L
+    let avg = doAvg s'
     return avg
   else return 0.0
 
@@ -45,8 +46,8 @@ printCl = liftIO . putStrLn
 
 app :: App Done
 app = do
-  remoteSec1 <- liftNewRef [15,30,11,6] :: App (Ref [Int])
-  remoteSec2 <- liftNewRef False :: App (Ref Bool)
+  remoteSec1 <- liftNewRef [15,30,11,6] :: App (Ref (Sec H [Int]))
+  remoteSec2 <- liftNewRef False :: App (Ref (Sec H Bool))
   gD <- remote $ getData remoteSec1
   rA <- remote $ releaseAvg remoteSec2
   gA <- remote $ getAvg remoteSec2 remoteSec1

@@ -11,6 +11,8 @@ import Data.Binary(Binary, encode, decode)
 import Data.ByteString.Lazy(ByteString)
 import Data.IORef
 import Network.Simple.TCP
+import Security.Sec
+import Security.Lattice
 import System.IO(hFlush, stdout)
 
 import App
@@ -37,22 +39,22 @@ instance Monad Server where
 
 data Remote a = RemoteDummy
 
-serverConstant :: a -> App (Server a)
-serverConstant = return . return
+serverConstant :: a -> App (Server (Sec H a))
+serverConstant = return . return . sec
 
-liftNewRef :: a -> App (Ref a)
+liftNewRef :: a -> App (Ref (Sec H a))
 liftNewRef a = do
-  r <- liftIO $ newIORef a
+  r <- liftIO $ newIORef (sec a)
   return r
 
-newRef :: a -> Server (Ref a)
-newRef x = Server $ newIORef x
+newRef :: a -> Server (Ref (Sec H a))
+newRef x = Server $ newIORef $ sec x
 
-readRef :: Ref a -> Server a
+readRef :: Ref (Sec H a) -> Server (Sec H a)
 readRef ref = Server $ readIORef ref
 
-writeRef :: Ref a -> a -> Server ()
-writeRef ref = Server . writeIORef ref
+writeRef :: Ref (Sec H a) -> a -> Server ()
+writeRef ref v = Server $ writeIORef ref (sec v)
 
 remote :: (Remotable a) => a -> App (Remote a)
 remote f = App $ do
@@ -97,16 +99,6 @@ runApp (App s) = do
   return a -- the a is irrelevant
 
 
-ntimes :: Binary a
-       => Int -> (Remote (Server a) -> Client a)
-       -> App (Remote (Server a) -> Client (Maybe a))
-ntimes n _ = do
-  r <- liftNewRef n
-  _ <- remote $ do
-    v <- readRef r
-    writeRef r $ v - 1
-    return (v > 0)
-  return $ \_ -> ClientDummy
 
 onEvent :: [(CallID, Method)] -> ByteString -> Socket -> IO ()
 onEvent mapping incoming socket = do

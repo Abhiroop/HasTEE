@@ -1,9 +1,16 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# OPTIONS_GHC -Wno-unused-top-binds#-}
-module Security.Lattice (L, Less, less) where
+module Security.Lattice (H(), L(..), Less, less) where
 
+#ifdef ENCLAVE
 data L = L
 data H = H
+#else
+data L = L
+data H
+#endif
+
 
 class Less sl sh where
   less :: sl -> sh -> ()
