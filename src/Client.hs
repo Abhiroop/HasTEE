@@ -1,17 +1,17 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE ScopedTypeVariables, RankNTypes, TypeApplications #-}
 {-# OPTIONS_GHC -Wno-missing-methods #-}
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
 module Client(module Client) where
 
+import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Trans.State.Strict
 import Data.ByteString.Lazy(ByteString)
 import Data.Binary(Binary, encode, decode)
 import Network.Simple.TCP
-import Security.Sec
-import Security.Lattice
 import App
 
 
@@ -77,3 +77,52 @@ onServer (Remote identifier args) = do
 
 runApp :: App a -> IO a
 runApp (App s) = evalStateT s initAppState
+
+
+
+
+
+----------------------LABELS and Sec----------------------------------
+data L = L
+data H
+
+newtype Sec s a = MkSec a -- dont export MkSec
+
+instance Monad (Sec s) where
+  return = pure
+
+  MkSec a >>= k =
+    MkSec $ let MkSec b = k a in b
+
+instance Functor (Sec s) where
+  fmap = liftM
+
+instance Applicative (Sec s) where
+  pure = sec
+  MkSec ab <*> MkSec a = MkSec (ab a)
+
+
+--used to protect value `a`
+sec :: a -> Sec s a
+sec = MkSec
+
+-- look at a protected value given
+-- that you can produce a security
+-- level `s`
+open :: Sec s a -> s -> a
+open _ _ = error "Client cannot open"
+
+-- up :: forall a sl sh . Less sl sh => Sec sl a -> Sec sh a
+-- up (MkSec x) = (less @sl @sh) `seq` sech
+--   where
+--     sech = (MkSec x)
+
+-- -- only for trusted code
+-- reveal :: Sec s a -> a
+-- reveal (MkSec x) = x
+
+declassify :: Sec H a -> Sec L a
+declassify _ = error "Client cannot declassify"
+
+endorse :: Sec L a -> Sec H a
+endorse _ = error "Client cannot endorse"

@@ -27,11 +27,6 @@ instance Applicative (Sec s) where
 sec :: a -> Sec s a
 sec = MkSec
 
--- look at a protected value given
--- that you can produce a security
--- level `s`
-open :: Sec s a -> s -> a
-open (MkSec a) s = s `seq` a
 
 up :: forall a sl sh . Less sl sh => Sec sl a -> Sec sh a
 up (MkSec x) = (less @sl @sh) `seq` sech
@@ -42,8 +37,26 @@ up (MkSec x) = (less @sl @sh) `seq` sech
 -- reveal :: Sec s a -> a
 -- reveal (MkSec x) = x
 
+#ifdef ENCLAVE
 declassify :: Sec H a -> Sec L a
 declassify (MkSec x) = (MkSec x)
 
 endorse :: Sec L a -> Sec H a
 endorse (MkSec x) = (MkSec x)
+
+-- look at a protected value given
+-- that you can produce a security
+-- level `s`
+open :: Sec s a -> s -> a
+open (MkSec a) s = s `seq` a
+
+#else
+declassify :: Sec H a -> Sec L a
+declassify (MkSec x) = error "Client cannot declassify"
+
+endorse :: Sec L a -> Sec H a
+endorse (MkSec x) = error "Client cannot endorse"
+
+open :: Sec s a -> s -> a
+open (MkSec a) s = error "Client cannot open"
+#endif

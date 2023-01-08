@@ -5,8 +5,6 @@ import Control.Monad.IO.Class(liftIO)
 import Data.List(genericLength)
 import GHC.Float(int2Float)
 import App
-import Security.Lattice
-import Security.Sec
 
 #ifdef ENCLAVE
 import Server
@@ -19,7 +17,7 @@ import Client
 getData :: Ref (Sec H [Int]) -> Int -> Server Int
 getData secret idx = do
   sech <- readRef secret
-  let s = open (declassify (sech)) L
+  let s = open (declassify sech) L
   return (s !! idx)
 
 releaseAvg :: Ref (Sec H Bool) -> Server ()
