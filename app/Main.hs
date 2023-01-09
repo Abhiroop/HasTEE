@@ -17,7 +17,7 @@ import Client
 getData :: Ref (Sec H [Int]) -> Int -> Server Int
 getData secret idx = do
   sech <- readRef secret
-  let s = open (declassify sech) L
+  let s = declassify sech
   return (s !! idx)
 
 releaseAvg :: Ref (Sec H Bool) -> Server ()
@@ -29,11 +29,11 @@ doAvg xs = realToFrac (sum xs) / genericLength xs
 getAvg :: Ref (Sec H Bool) -> Ref (Sec H [Int]) -> Server Float
 getAvg bool secret = do
   b' <- readRef bool
-  let b = open (declassify b') L
+  let b = declassify b'
   if b
   then do
     s <- readRef secret
-    let s' = open (declassify s) L
+    let s' = declassify s
     let avg = doAvg s'
     return avg
   else return 0.0

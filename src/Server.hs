@@ -128,7 +128,6 @@ onEvent mapping incoming socket = do
 
 ----------------------LABELS and Sec----------------------------------
 
-data L = L
 data H = H
 
 newtype Sec s a = MkSec a
@@ -167,8 +166,8 @@ open (MkSec a) s = s `seq` a
 -- reveal (MkSec x) = x
 
 
-declassify :: Sec H a -> Sec L a
-declassify (MkSec x) = (MkSec x)
+declassify :: Sec H a -> a
+declassify sech = open sech H
 
-endorse :: Sec L a -> Sec H a
-endorse (MkSec x) = (MkSec x)
+-- endorse :: Sec L a -> Sec H a
+-- endorse (MkSec x) = (MkSec x)

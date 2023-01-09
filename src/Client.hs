@@ -83,7 +83,6 @@ runApp (App s) = evalStateT s initAppState
 
 
 ----------------------LABELS and Sec----------------------------------
-data L = L
 data H
 
 newtype Sec s a = MkSec a -- dont export MkSec
@@ -121,8 +120,8 @@ open _ _ = error "Client cannot open"
 -- reveal :: Sec s a -> a
 -- reveal (MkSec x) = x
 
-declassify :: Sec H a -> Sec L a
+declassify :: Sec H a -> a
 declassify _ = error "Client cannot declassify"
 
-endorse :: Sec L a -> Sec H a
-endorse _ = error "Client cannot endorse"
+-- endorse :: Sec L a -> Sec H a
+-- endorse _ = error "Client cannot endorse"
