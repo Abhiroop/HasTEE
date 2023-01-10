@@ -1,5 +1,14 @@
 ## DESIGN
 
+### Line of defence in the enclaves
+
+1. No I/O; it is not possible to do I/O in the Server monad
+2. Sec values; Only server can declassify Sec values
+3. Safe Haskell? Should we compile Server.hs with `{-# SafeHaskell #-}` to prevent unsafePerformIO, unsafeCoerce etc?
+4. `ntimes` hatch; cap the number of times the enclave can be called
+
+## Old discussion
+
 Lets take an example. Say the password checker
 
 ```haskell
