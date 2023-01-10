@@ -1,10 +1,12 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE ScopedTypeVariables, RankNTypes, TypeApplications #-}
 {-# OPTIONS_GHC -Wno-missing-methods #-}
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
 module Server(module Server) where
 
+import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Trans.State.Strict
 import Data.Binary(Binary, encode, decode)
@@ -12,7 +14,6 @@ import Data.ByteString.Lazy(ByteString)
 import Data.IORef
 import Network.Simple.TCP
 import System.IO(hFlush, stdout)
-
 import App
 
 import qualified Data.ByteString.Lazy as B
@@ -52,7 +53,7 @@ readRef :: Ref a -> Server a
 readRef ref = Server $ readIORef ref
 
 writeRef :: Ref a -> a -> Server ()
-writeRef ref = Server . writeIORef ref
+writeRef ref v = Server $ writeIORef ref v
 
 remote :: (Remotable a) => a -> App (Remote a)
 remote f = App $ do
@@ -97,25 +98,19 @@ runApp (App s) = do
   return a -- the a is irrelevant
 
 
-ntimes :: Binary a
-       => Int -> (Remote (Server a) -> Client a)
-       -> App (Remote (Server a) -> Client (Maybe a))
-ntimes n _ = do
-  r <- liftNewRef n
-  _ <- remote $ do
-    v <- readRef r
-    writeRef r $ v - 1
-    return (v > 0)
-  return $ \_ -> ClientDummy
 
 onEvent :: [(CallID, Method)] -> ByteString -> Socket -> IO ()
 onEvent mapping incoming socket = do
   let (identifier, args) = decode incoming :: (CallID, [ByteString])
       Just f = lookup identifier mapping
   result <- f args
-  sendLazy socket (B.append (msgSize result) result) -- See NOTE 1
+  let res = handleVoidTy result -- the () type cannot be sent over wire
+  sendLazy socket (B.append (msgSize res) res) -- See NOTE 1
   where
-    msgSize res = encode $ B.length res
+    msgSize r = encode $ B.length r
+    handleVoidTy r = if (B.length r == 0) -- the () type has msg length 0
+                     then encode '\0'
+                     else r
 
 -- NOTE 1
 -- We do not use `createPayload` because as a first step it
@@ -126,3 +121,53 @@ onEvent mapping incoming socket = do
 -- on the value of some identifier term that we send, it decides
 -- to encode or not encode the message body but then the type
 -- will become an actual dependent type. (Keep it simple!)
+
+
+
+
+
+----------------------Sec----------------------------------
+
+{- Labels have been removed for now so we only have secret values -}
+
+newtype Sec a = MkSec a
+
+instance Monad Sec where
+  return = pure
+
+  MkSec a >>= k =
+    MkSec $ let MkSec b = k a in b
+
+instance Functor Sec where
+  fmap = liftM
+
+instance Applicative Sec where
+  pure = sec
+  MkSec ab <*> MkSec a = MkSec (ab a)
+
+
+--used to protect value `a`
+sec :: a -> Sec a
+sec = MkSec
+
+-- look at a protected value given
+-- that you can produce a security
+-- level `s`
+-- open :: Sec s a -> s -> a
+-- open (MkSec a) s = s `seq` a
+
+-- up :: forall a sl sh . Less sl sh => Sec sl a -> Sec sh a
+-- up (MkSec x) = (less @sl @sh) `seq` sech
+--   where
+--     sech = (MkSec x)
+
+-- -- only for trusted code
+-- reveal :: Sec s a -> a
+-- reveal (MkSec x) = x
+
+
+declassify :: Sec a -> a
+declassify (MkSec a) = a
+
+-- endorse :: a -> Sec H a
+-- endorse = MkSec
