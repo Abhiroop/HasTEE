@@ -39,19 +39,19 @@ instance (Binary a) => Remotable (Server a) where
 instance (Binary a, Remotable b) => Remotable (a -> b) where
   mkRemote f = \(x:xs) -> mkRemote (f $ decode x) xs
 
-serverConstant :: a -> App (Server (Sec H a))
+serverConstant :: a -> App (Server a)
 serverConstant _ = return ServerDummy
 
-liftNewRef :: a -> App (Ref (Sec H a))
+liftNewRef :: a -> App (Ref a)
 liftNewRef _ = return RefDummy
 
-newRef :: a -> Server (Ref (Sec H a))
+newRef :: a -> Server (Ref a)
 newRef _ = ServerDummy
 
-readRef :: Ref (Sec H a) -> Server (Sec H a)
+readRef :: Ref a -> Server a
 readRef _ = ServerDummy
 
-writeRef :: Ref (Sec H a) -> a -> Server ()
+writeRef :: Ref a -> a -> Server ()
 writeRef _ _ = ServerDummy
 
 
@@ -123,5 +123,5 @@ open _ _ = error "Client cannot open"
 declassify :: Sec H a -> a
 declassify _ = error "Client cannot declassify"
 
--- endorse :: Sec L a -> Sec H a
--- endorse _ = error "Client cannot endorse"
+endorse :: a -> Sec H a
+endorse _ = error "Client cannot endorse"

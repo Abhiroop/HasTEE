@@ -38,22 +38,22 @@ instance Monad Server where
 
 data Remote a = RemoteDummy
 
-serverConstant :: a -> App (Server (Sec H a))
-serverConstant = return . return . sec
+serverConstant :: a -> App (Server a)
+serverConstant = return . return
 
-liftNewRef :: a -> App (Ref (Sec H a))
+liftNewRef :: a -> App (Ref a)
 liftNewRef a = do
-  r <- liftIO $ newIORef (sec a)
+  r <- liftIO $ newIORef a
   return r
 
-newRef :: a -> Server (Ref (Sec H a))
-newRef x = Server $ newIORef $ sec x
+newRef :: a -> Server (Ref a)
+newRef x = Server $ newIORef x
 
-readRef :: Ref (Sec H a) -> Server (Sec H a)
+readRef :: Ref a -> Server a
 readRef ref = Server $ readIORef ref
 
-writeRef :: Ref (Sec H a) -> a -> Server ()
-writeRef ref v = Server $ writeIORef ref (sec v)
+writeRef :: Ref a -> a -> Server ()
+writeRef ref v = Server $ writeIORef ref v
 
 remote :: (Remotable a) => a -> App (Remote a)
 remote f = App $ do
@@ -169,5 +169,5 @@ open (MkSec a) s = s `seq` a
 declassify :: Sec H a -> a
 declassify sech = open sech H
 
--- endorse :: Sec L a -> Sec H a
--- endorse (MkSec x) = (MkSec x)
+endorse :: a -> Sec H a
+endorse = MkSec
