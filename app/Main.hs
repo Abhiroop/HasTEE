@@ -14,48 +14,17 @@ import Client
 
 
 
-getData :: Ref (Sec [Int]) -> Int -> Server Int
-getData secret idx = do
-  sech <- readRef secret
-  let sec_i = fmap (\s -> s !! idx) sech
-  return (declassify sec_i)
-
-releaseAvg :: Ref Bool -> Server ()
-releaseAvg bool = writeRef bool True
-
-doAvg :: [Int] -> Float
-doAvg xs = realToFrac (sum xs) / genericLength xs
-
-getAvg :: Ref Bool -> Ref (Sec [Int]) -> Server Float
-getAvg bool secret = do
-  b <- readRef bool
-  if b
-  then do
-    s <- readRef secret
-    let s' = declassify s
-    let avg = doAvg s'
-    return avg
-  else return 0.0
-
-
-printCl :: String -> Client ()
-printCl = liftIO . putStrLn
-
 app :: App Done
 app = do
-  remoteSec1 <- liftNewRef (sec [15,30,11,6]) :: App (Ref (Sec [Int]))
-  remoteSec2 <- liftNewRef False :: App (Ref Bool)
-  gD <- remote $ getData remoteSec1
-  rA <- remote $ releaseAvg remoteSec2
-  gA <- remote $ getAvg remoteSec2 remoteSec1
+  remoteRef <- liftNewRef 0 :: App (Ref Int)
+  count <- ntimes 3 $ do
+    v <- readRef remoteRef
+    writeRef remoteRef (v + 1)
+    return v
   runClient $ do
-    data1 <- onServer (gD <.> 3)
-    _     <- onServer rA
-    avg   <- onServer gA
-    let b = dummyCompOnData data1 avg
-    printCl $ "Is data less than avg? " <> show b
-  where
-    dummyCompOnData i av = int2Float i < av
+    sequence $ replicate 4 $ do
+      visitors <- onServer count
+      liftIO $ putStrLn $ "You are visitor number #" ++ show visitors
 
 
 main :: IO ()

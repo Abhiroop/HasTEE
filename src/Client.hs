@@ -6,6 +6,7 @@
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
 module Client(module Client) where
 
+import Data.Maybe
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Trans.State.Strict
@@ -30,11 +31,14 @@ remote _ = App $ do
   put (next_id + 1, remotes)
   return $ Remote next_id []
 
+ntimes :: (Remotable a) => Int -> a -> App (Remote a)
+ntimes _ = remote
+
 class Remotable a where
-  mkRemote :: a -> ([ByteString] -> Server ByteString)
+  mkRemote :: a -> ([ByteString] -> Server (Maybe ByteString))
 
 instance (Binary a) => Remotable (Server a) where
-  mkRemote m = \_ -> fmap encode m
+  mkRemote m = \_ -> fmap (Just . encode) m
 
 instance (Binary a, Remotable b) => Remotable (a -> b) where
   mkRemote f = \(x:xs) -> mkRemote (f $ decode x) xs
@@ -63,7 +67,7 @@ runClient cl = do
   v <- liftIO cl
   return $ v `seq` Done
 
-onServer :: (Binary a) => Remote (Server a) -> Client a
+onServer :: (Binary a) => Remote (Server a) -> Client (Maybe a)
 onServer (Remote identifier args) = do
   {- SENDING REQUEST HERE -}
   connect localhost connectPort $ \(connectionSocket, remoteAddr) -> do
@@ -71,9 +75,11 @@ onServer (Remote identifier args) = do
     putStrLn $ "Connection established to " ++ show remoteAddr
     sendLazy connectionSocket $ createPayload (identifier, reverse args)
     resp <- readTCPSocket connectionSocket
-    return $ decode resp
+    return $ fmap decode (decode resp :: Maybe ByteString)    
   {- SENDING ENDS -}
 
+unsafeOnServer :: Binary a => Remote (Server a) -> Client a
+unsafeOnServer closure = fromJust <$> onServer closure
 
 runApp :: App a -> IO a
 runApp (App s) = evalStateT s initAppState
