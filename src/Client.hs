@@ -82,34 +82,33 @@ runApp (App s) = evalStateT s initAppState
 
 
 
-----------------------LABELS and Sec----------------------------------
-data H
+----------------------Sec----------------------------------
 
-newtype Sec s a = MkSec a -- dont export MkSec
+newtype Sec a = MkSec a -- dont export MkSec
 
-instance Monad (Sec s) where
+instance Monad Sec where
   return = pure
 
   MkSec a >>= k =
     MkSec $ let MkSec b = k a in b
 
-instance Functor (Sec s) where
+instance Functor Sec where
   fmap = liftM
 
-instance Applicative (Sec s) where
+instance Applicative Sec where
   pure = sec
   MkSec ab <*> MkSec a = MkSec (ab a)
 
 
 --used to protect value `a`
-sec :: a -> Sec s a
+sec :: a -> Sec a
 sec = MkSec
 
 -- look at a protected value given
 -- that you can produce a security
 -- level `s`
-open :: Sec s a -> s -> a
-open _ _ = error "Client cannot open"
+-- open :: Sec s a -> s -> a
+-- open _ _ = error "Client cannot open"
 
 -- up :: forall a sl sh . Less sl sh => Sec sl a -> Sec sh a
 -- up (MkSec x) = (less @sl @sh) `seq` sech
@@ -120,8 +119,8 @@ open _ _ = error "Client cannot open"
 -- reveal :: Sec s a -> a
 -- reveal (MkSec x) = x
 
-declassify :: Sec H a -> a
+declassify :: Sec a -> a
 declassify _ = error "Client cannot declassify"
 
-endorse :: a -> Sec H a
-endorse _ = error "Client cannot endorse"
+-- endorse :: a -> Sec H a
+-- endorse _ = error "Client cannot endorse"

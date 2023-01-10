@@ -126,35 +126,35 @@ onEvent mapping incoming socket = do
 
 
 
-----------------------LABELS and Sec----------------------------------
+----------------------Sec----------------------------------
 
-data H = H
+{- Labels have been removed for now so we only have secret values -}
 
-newtype Sec s a = MkSec a
+newtype Sec a = MkSec a
 
-instance Monad (Sec s) where
+instance Monad Sec where
   return = pure
 
   MkSec a >>= k =
     MkSec $ let MkSec b = k a in b
 
-instance Functor (Sec s) where
+instance Functor Sec where
   fmap = liftM
 
-instance Applicative (Sec s) where
+instance Applicative Sec where
   pure = sec
   MkSec ab <*> MkSec a = MkSec (ab a)
 
 
 --used to protect value `a`
-sec :: a -> Sec s a
+sec :: a -> Sec a
 sec = MkSec
 
 -- look at a protected value given
 -- that you can produce a security
 -- level `s`
-open :: Sec s a -> s -> a
-open (MkSec a) s = s `seq` a
+-- open :: Sec s a -> s -> a
+-- open (MkSec a) s = s `seq` a
 
 -- up :: forall a sl sh . Less sl sh => Sec sl a -> Sec sh a
 -- up (MkSec x) = (less @sl @sh) `seq` sech
@@ -166,8 +166,8 @@ open (MkSec a) s = s `seq` a
 -- reveal (MkSec x) = x
 
 
-declassify :: Sec H a -> a
-declassify sech = open sech H
+declassify :: Sec a -> a
+declassify (MkSec a) = a
 
-endorse :: a -> Sec H a
-endorse = MkSec
+-- endorse :: a -> Sec H a
+-- endorse = MkSec
