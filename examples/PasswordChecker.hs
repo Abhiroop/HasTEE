@@ -17,7 +17,7 @@ pwdChkr pwd guess = fmap (== guess) pwd
 
 passwordChecker :: App Done
 passwordChecker = do
-  paswd <- liftServerIO (return "secret") :: App (Server String) -- see NOTE 1
+  paswd <- serverConstant ("secret") :: App (Server String) -- see NOTE 1
   serverFunc <- remote $ pwdChkr paswd
   runClient $ do
     liftIO $ putStrLn "Enter your password"
@@ -35,3 +35,4 @@ main = do
 -- If the question is about the untrusted client accessing the actual source code
 -- it is quite possible to instead give the client
 -- `liftServerIO undefined` -- see the Client.hs definition of liftServerIO
+

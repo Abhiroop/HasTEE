@@ -16,10 +16,11 @@ import Client
 
 app :: App Done
 app = do
-  remoteRef <- liftNewRef 0 :: App (Ref Int)
+  remoteRef <- liftNewRef 0 :: App (Server (Ref Int))
   count <- remote $ do
-    v <- readRef remoteRef
-    writeRef remoteRef (v + 1)
+    r <- remoteRef
+    v <- readRef r
+    writeRef r (v + 1)
     return v
   runClient $ do
     visitors <- onServer count

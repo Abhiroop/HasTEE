@@ -12,6 +12,7 @@ import Control.Monad.Trans.State.Strict
 import Data.Binary(Binary, encode, decode)
 import Data.ByteString.Lazy(ByteString)
 import Data.IORef
+import Data.Maybe
 import Network.Simple.TCP
 import System.IO(hFlush, stdout)
 import App
@@ -41,10 +42,10 @@ data Remote a = RemoteDummy
 serverConstant :: a -> App (Server a)
 serverConstant = return . return
 
-liftNewRef :: a -> App (Ref a)
-liftNewRef a = do
+liftNewRef :: a -> App (Server (Ref a))
+liftNewRef a = App $ do
   r <- liftIO $ newIORef a
-  return r
+  return (return r)
 
 newRef :: a -> Server (Ref a)
 newRef x = Server $ newIORef x
@@ -61,15 +62,29 @@ remote f = App $ do
   put (next_id + 1, (next_id, \bs -> let Server n = mkRemote f bs in n) : remotes)
   return RemoteDummy
 
+ntimes :: (Remotable a) => Int -> a -> App (Remote a)
+ntimes n f = App $ do
+  r <- liftIO $ newIORef n
+  (next_id, remotes) <- get
+  put (next_id + 1, (next_id, \bs ->
+    let Server s = do c <- Server $ do atomicModifyIORef' r $ \i -> (i - 1, i)
+                      if c > 0
+                        then mkRemote f bs
+                        else return Nothing
+    in s) : remotes)
+
+
+  return RemoteDummy
+
 (<.>) :: Binary a => Remote (a -> b) -> a -> Remote b
 (<.>) = error "Access to client not allowed"
 
 
 class Remotable a where
-  mkRemote :: a -> ([ByteString] -> Server ByteString)
+  mkRemote :: a -> ([ByteString] -> Server (Maybe ByteString))
 
 instance (Binary a) => Remotable (Server a) where
-  mkRemote m = \_ -> fmap encode m
+  mkRemote m = \_ -> fmap (Just . encode) m
 
 instance (Binary a, Remotable b) => Remotable (a -> b) where
   mkRemote f = \(x:xs) -> mkRemote (f $ decode x) xs
@@ -79,8 +94,14 @@ data Client a = ClientDummy deriving (Functor, Applicative, Monad, MonadIO)
 runClient :: Client a -> App Done
 runClient _ = return Done
 
-onServer :: (Binary a) => Remote (Server a) -> Client a
+tryServer :: (Binary a) => Remote (Server a) -> Client (Maybe a)
+tryServer _ = ClientDummy
+
+onServer :: Binary a => Remote (Server a) -> Client a
 onServer _ = ClientDummy
+
+unsafeOnServer :: Binary a => Remote (Server a) -> Client a
+unsafeOnServer _ = ClientDummy
 
 {-@ The server's event loop. @-}
 runApp :: App a -> IO a
@@ -103,7 +124,7 @@ onEvent :: [(CallID, Method)] -> ByteString -> Socket -> IO ()
 onEvent mapping incoming socket = do
   let (identifier, args) = decode incoming :: (CallID, [ByteString])
       Just f = lookup identifier mapping
-  result <- f args
+  result <- encode <$> f args
   let res = handleVoidTy result -- the () type cannot be sent over wire
   sendLazy socket (B.append (msgSize res) res) -- See NOTE 1
   where

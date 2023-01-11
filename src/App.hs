@@ -21,14 +21,26 @@ writeRef   :: Ref a -> a -> Server ()
 -- immutable value
 serverConstant :: a -> App (Server a)
 -- closures
+-- create an escape hatch that can be used however many times you want
 remote :: Remotable a => a -> App (Remote a)
+
+-- create an escape hatch that can be used only a specific amount of times
+ntimes :: Remotable a => Int -> a -> App (Remote a)
 
 -- use the below function to introduce the Client monad
 runClient :: Client () -> App Done
 
 
--- use the 2 functions below to talk to the server
+-- use the 3 functions below to talk to the server
 -- inside the Client monad
+
+-- try to extract a result from a server computation. Might fail if the
+-- declassifier does not allow the information leak
+tryServer :: Remote (Server a) -> Client (Maybe a)
+
+-- Extract a result from a server computation, with the assumption
+-- that it will not fail. Will throw an exception if the result is not
+-- returned due to some policy violation.
 onServer :: Remote (Server a) -> Client a
 (<.>) :: Binary a => Remote (a -> b) -> a -> Remote b
 
@@ -40,7 +52,7 @@ runApp :: App a -> IO a
 
 
 type CallID = Int
-type Method = [ByteString] -> IO ByteString
+type Method = [ByteString] -> IO (Maybe ByteString)
 type AppState = (CallID, [(CallID, Method)])
 newtype App a = App (StateT AppState IO a)
   deriving (Functor, Applicative, Monad, MonadIO)
