@@ -2,8 +2,10 @@
 module Main where
 
 import Control.Monad.IO.Class(liftIO)
-
+import Data.List(genericLength)
+import GHC.Float(int2Float)
 import App
+
 
 #ifdef ENCLAVE
 import Server
@@ -11,27 +13,58 @@ import Server
 import Client
 #endif
 
-pwdChkr :: Server String -> String -> Server Bool
-pwdChkr pwd guess = fmap (== guess) pwd
 
 
-passwordChecker :: App Done
-passwordChecker = do
-  paswd <- serverConstant "secret" :: App (Server String) -- see NOTE 1
-  serverFunc <- remote $ pwdChkr paswd
+getData :: Server (Ref [Int]) -> Int -> Server Int
+getData secret idx = do
+  r <- secret
+  s <- readRef r
+  return (s !! idx)
+
+releaseAvg :: Server (Ref Bool) -> Server Bool
+releaseAvg bool = do
+  ref <- bool
+  writeRef ref True
+  r <- readRef ref
+  return r
+
+doAvg :: [Int] -> Float
+doAvg xs = realToFrac (sum xs) / genericLength xs
+
+getAvg :: Server (Ref Bool) -> Server (Ref [Int]) -> Server Float
+getAvg bool' secret' = do
+  bool <- bool'
+  secret <- secret'
+  b <- readRef bool
+  if b
+  then do
+    s <- readRef secret
+    let avg = doAvg s
+    return avg
+  else return 0.0
+
+
+printCl :: String -> Client ()
+printCl = liftIO . putStrLn
+
+app :: App Done
+app = do
+  remoteSec1 <- liftNewRef [15,30,11,6] :: App (Server (Ref [Int]))
+  remoteSec2 <- liftNewRef False :: App (Server (Ref Bool))
+  gD <- remote $ getData remoteSec1
+  rA <- remote $ releaseAvg remoteSec2
+  gA <- remote $ getAvg remoteSec2 remoteSec1
   runClient $ do
-    liftIO $ putStrLn "Enter your password"
-    userInput <- liftIO getLine
-    res <- onServer (serverFunc <.> userInput)
-    liftIO $ putStrLn $ "Your login attempt returned " <> (show res)
+    data1 <- onServer (gD <.> 3)
+    _     <- onServer rA
+    avg   <- onServer gA
+    let b = dummyCompOnData data1 avg
+    printCl $ "Is data less than avg? " <> show b
+  where
+    dummyCompOnData i av = int2Float i < av
 
 
 main :: IO ()
 main = do
-  res <- runApp passwordChecker
+  res <- runApp app
   return $ res `seq` ()
-
--- NOTE 1
--- If the question is about the untrusted client accessing the actual source code
--- it is quite possible to instead give the client
--- `liftServerIO undefined` -- see the Client.hs definition of liftServerIO

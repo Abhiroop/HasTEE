@@ -42,10 +42,10 @@ data Remote a = RemoteDummy
 serverConstant :: a -> App (Server a)
 serverConstant = return . return
 
-liftNewRef :: a -> App (Ref a)
-liftNewRef a = do
+liftNewRef :: a -> App (Server (Ref a))
+liftNewRef a = App $ do
   r <- liftIO $ newIORef a
-  return r
+  return (return r)
 
 newRef :: a -> Server (Ref a)
 newRef x = Server $ newIORef x

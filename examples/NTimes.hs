@@ -2,6 +2,8 @@ module NTimes where
 
 import App
 
+import Control.Monad.IO.Class(liftIO)
+
 #ifdef ENCLAVE
 import Server
 #else
@@ -11,14 +13,15 @@ import Client
 
 app :: App Done
 app = do
-  remoteRef <- liftNewRef 0 :: App (Ref Int)
+  remoteRef <- liftNewRef 0 :: App (Server (Ref Int))
   count <- ntimes 3 $ do
-    v <- readRef remoteRef
-    writeRef remoteRef (v + 1)
+    r <- remoteRef
+    v <- readRef r
+    writeRef r (v + 1)
     return v
   runClient $ do
     sequence $ replicate 4 $ do
-      visitors <- onServer count
+      visitors <- tryServer count
       liftIO $ putStrLn $ "You are visitor number #" ++ show visitors
 
 
@@ -26,3 +29,4 @@ main :: IO ()
 main = do
   res <- runApp app
   return $ res `seq` ()
+

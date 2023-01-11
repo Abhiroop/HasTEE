@@ -46,8 +46,8 @@ instance (Binary a, Remotable b) => Remotable (a -> b) where
 serverConstant :: a -> App (Server a)
 serverConstant _ = return ServerDummy
 
-liftNewRef :: a -> App (Ref a)
-liftNewRef _ = return RefDummy
+liftNewRef :: a -> App (Server (Ref a))
+liftNewRef _ = return ServerDummy
 
 newRef :: a -> Server (Ref a)
 newRef _ = ServerDummy
