@@ -14,7 +14,7 @@ import Network.Simple.TCP
 -- use the below functions to describe your server API
 
 -- mutable references
-liftNewRef :: a -> App (Ref a)
+liftNewRef :: a -> App (Server (Ref a))
 newRef :: a -> Server (Ref a)
 readRef    :: Ref a -> Server a
 writeRef   :: Ref a -> a -> Server ()

@@ -52,3 +52,7 @@ onServer :: Remote (Server a) -> Client (Maybe a)
  
 - We also need a restricted IO monad. One from which IO calls like the ones shown in the attack are not possible.
 
+
+
+1. average calculation of salaries; clients are threads and the server is the enclave that exposes only the average
+2. password checker

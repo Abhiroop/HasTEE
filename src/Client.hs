@@ -75,7 +75,7 @@ tryServer (Remote identifier args) = do
     putStrLn $ "Connection established to " ++ show remoteAddr
     sendLazy connectionSocket $ createPayload (identifier, reverse args)
     resp <- readTCPSocket connectionSocket
-    return $ fmap decode (decode resp :: Maybe ByteString)    
+    return $ fmap decode (decode resp :: Maybe ByteString)
   {- SENDING ENDS -}
 
 onServer :: Binary a => Remote (Server a) -> Client a
