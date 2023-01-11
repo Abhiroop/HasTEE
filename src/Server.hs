@@ -66,11 +66,12 @@ ntimes :: (Remotable a) => Int -> a -> App (Remote a)
 ntimes n f = App $ do
   r <- liftIO $ newIORef n
   (next_id, remotes) <- get
-  put (next_id + 1, (next_id, \bs -> let Server s = do c <- Server $ do atomicModifyIORef' r $ \i -> (i - 1, i)
-                                                       if c > 0
-                                                        then mkRemote f bs
-                                                         else return Nothing
-                                      in s) : remotes)
+  put (next_id + 1, (next_id, \bs ->
+    let Server s = do c <- Server $ do atomicModifyIORef' r $ \i -> (i - 1, i)
+                      if c > 0
+                        then mkRemote f bs
+                        else return Nothing
+    in s) : remotes)
 
 
   return RemoteDummy
@@ -93,7 +94,10 @@ data Client a = ClientDummy deriving (Functor, Applicative, Monad, MonadIO)
 runClient :: Client a -> App Done
 runClient _ = return Done
 
-onServer :: (Binary a) => Remote (Server a) -> Client (Maybe a)
+tryServer :: (Binary a) => Remote (Server a) -> Client (Maybe a)
+tryServer _ = ClientDummy
+
+onServer :: Binary a => Remote (Server a) -> Client a
 onServer _ = ClientDummy
 
 unsafeOnServer :: Binary a => Remote (Server a) -> Client a

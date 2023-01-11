@@ -67,8 +67,8 @@ runClient cl = do
   v <- liftIO cl
   return $ v `seq` Done
 
-onServer :: (Binary a) => Remote (Server a) -> Client (Maybe a)
-onServer (Remote identifier args) = do
+tryServer :: (Binary a) => Remote (Server a) -> Client (Maybe a)
+tryServer (Remote identifier args) = do
   {- SENDING REQUEST HERE -}
   connect localhost connectPort $ \(connectionSocket, remoteAddr) -> do
     -- debug logs
@@ -78,8 +78,8 @@ onServer (Remote identifier args) = do
     return $ fmap decode (decode resp :: Maybe ByteString)    
   {- SENDING ENDS -}
 
-unsafeOnServer :: Binary a => Remote (Server a) -> Client a
-unsafeOnServer closure = fromJust <$> onServer closure
+onServer :: Binary a => Remote (Server a) -> Client a
+onServer closure = fromJust <$> tryServer closure
 
 runApp :: App a -> IO a
 runApp (App s) = evalStateT s initAppState

@@ -2,8 +2,7 @@
 module Main where
 
 import Control.Monad.IO.Class(liftIO)
-import Data.List(genericLength)
-import GHC.Float(int2Float)
+
 import App
 
 #ifdef ENCLAVE
@@ -12,22 +11,27 @@ import Server
 import Client
 #endif
 
+pwdChkr :: Server String -> String -> Server Bool
+pwdChkr pwd guess = fmap (== guess) pwd
 
 
-app :: App Done
-app = do
-  remoteRef <- liftNewRef 0 :: App (Ref Int)
-  count <- ntimes 3 $ do
-    v <- readRef remoteRef
-    writeRef remoteRef (v + 1)
-    return v
+passwordChecker :: App Done
+passwordChecker = do
+  paswd <- serverConstant "secret" :: App (Server String) -- see NOTE 1
+  serverFunc <- remote $ pwdChkr paswd
   runClient $ do
-    sequence $ replicate 4 $ do
-      visitors <- onServer count
-      liftIO $ putStrLn $ "You are visitor number #" ++ show visitors
+    liftIO $ putStrLn "Enter your password"
+    userInput <- liftIO getLine
+    res <- onServer (serverFunc <.> userInput)
+    liftIO $ putStrLn $ "Your login attempt returned " <> (show res)
 
 
 main :: IO ()
 main = do
-  res <- runApp app
+  res <- runApp passwordChecker
   return $ res `seq` ()
+
+-- NOTE 1
+-- If the question is about the untrusted client accessing the actual source code
+-- it is quite possible to instead give the client
+-- `liftServerIO undefined` -- see the Client.hs definition of liftServerIO
