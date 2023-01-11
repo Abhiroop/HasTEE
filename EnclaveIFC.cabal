@@ -1,4 +1,4 @@
-cabal-version: 1.12
+cabal-version: 2.2
 
 -- This file has been generated from package.yaml by hpack version 0.34.4.
 --
@@ -12,7 +12,7 @@ bug-reports:    https://github.com/Abhiroop/EnclaveIFC/issues
 author:         Author name here
 maintainer:     example@example.com
 copyright:      2022 Author name here
-license:        BSD3
+license:        BSD-3-Clause
 license-file:   LICENSE
 build-type:     Simple
 extra-source-files:
@@ -24,6 +24,10 @@ source-repository head
   location: https://github.com/Abhiroop/EnclaveIFC
 
 flag enclave
+  manual: True
+  default: False
+
+flag testing
   manual: True
   default: False
 
@@ -47,16 +51,7 @@ library
     , transformers
   default-language: Haskell2010
 
-executable EnclaveIFC-exe
-  main-is: Main.hs
-  other-modules:
-      Lattice
-      Program
-      Sec
-      SecIO
-      Paths_EnclaveIFC
-  hs-source-dirs:
-      app
+Common exe
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       EnclaveIFC
@@ -69,7 +64,34 @@ executable EnclaveIFC-exe
     cpp-options: -DENCLAVE
   else
     cpp-options: -DUMMY
+  if (flag(testing))
+    ghc-options: -w
+    cpp-options: -DTESTING
   default-language: Haskell2010
+
+executable EnclaveIFC-exe
+  import: exe
+  main-is: Main.hs
+  other-modules:
+      Lattice
+      Program
+      Sec
+      SecIO
+      Paths_EnclaveIFC
+  hs-source-dirs:
+      app
+
+executable SecureCounter-exe
+  import: exe
+  hs-source-dirs: examples/SecureCounter
+  main-is: SecureCounter.hs
+  ghc-options: -main-is SecureCounter
+
+executable EnclaveLeak-exe
+  import: exe
+  hs-source-dirs: examples/EnclaveLeak
+  main-is: EnclaveLeak.hs
+  ghc-options: -main-is EnclaveLeak
 
 test-suite EnclaveIFC-test
   type: exitcode-stdio-1.0
@@ -82,4 +104,6 @@ test-suite EnclaveIFC-test
   build-depends:
       EnclaveIFC
     , base >=4.7 && <5
+    , directory
+    , process
   default-language: Haskell2010

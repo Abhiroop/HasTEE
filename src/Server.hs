@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE ScopedTypeVariables, RankNTypes, TypeApplications #-}
+{-# LANGUAGE ScopedTypeVariables, RankNTypes, TypeApplications, CPP #-}
 {-# OPTIONS_GHC -Wno-missing-methods #-}
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
@@ -13,7 +13,7 @@ import Data.Binary(Binary, encode, decode)
 import Data.ByteString.Lazy(ByteString)
 import Data.IORef
 import Network.Simple.TCP
-import System.IO(hFlush, stdout)
+import System.IO(hFlush, stdout, hPutStrLn, stderr)
 import App
 
 import qualified Data.ByteString.Lazy as B
@@ -81,12 +81,16 @@ runClient _ = return Done
 
 onServer :: (Binary a) => Remote (Server a) -> Client a
 onServer _ = ClientDummy
-
+ 
 {-@ The server's event loop. @-}
 runApp :: App a -> IO a
 runApp (App s) = do
   (a, (_, vTable)) <- runStateT s initAppState
   {- BLOCKING HERE -}
+-- #ifdef TESTING
+  hPutStrLn stderr "enclave ready"
+--  putStrLn "enclave ready"
+-- #endif
   _ <- serve (Host localhost) connectPort $
     \(connectionSocket, remoteAddr) -> do
       -- debug log
