@@ -13,34 +13,28 @@ import Client
 #endif
 
 
+type Salary = Int
 
-getData :: Server (Ref (Sec [Int])) -> Int -> Server Int
-getData serv_secret idx = do
-  secret <- serv_secret
-  sech <- readRef secret
-  let sec_i = fmap (\s -> s !! idx) sech
-  return (declassify sec_i)
 
-releaseAvg :: Server (Ref Bool) -> Server ()
-releaseAvg sbool = do
-  bool <- sbool
-  writeRef bool True
+data ServerState = ServerState { average :: Float
+                               , clients :: Int
+                               } deriving Show
 
-doAvg :: [Int] -> Float
-doAvg xs = realToFrac (sum xs) / genericLength xs
+initServer :: ServerState
+initServer = ServerState { average = 0.0, clients = 0}
 
-getAvg :: Server (Ref Bool) -> Server (Ref (Sec [Int])) -> Server Float
-getAvg serv_bool serv_secret = do
-  bool   <- serv_bool
-  secret <- serv_secret
-  b <- readRef bool
-  if b
-  then do
-    s <- readRef secret
-    let s' = declassify s
-    let avg = doAvg s'
-    return avg
-  else return 0.0
+sendData :: Server (Ref ServerState) -> Salary -> Server ()
+sendData serverState salary = do
+  state_ref <- serverState
+  ServerState {average = avg, clients = cl} <- readRef state_ref
+  let new_avg = (avg + (realToFrac salary)) / (int2Float $ cl + 1)
+  writeRef state_ref (ServerState {average = new_avg, clients = cl + 1})
+
+getAvg :: Server (Ref ServerState) -> Server Float
+getAvg serverState = do
+  state_ref <- serverState
+  ServerState {average = avg, clients = cl} <- readRef state_ref
+  return avg
 
 
 printCl :: String -> Client ()
@@ -48,19 +42,15 @@ printCl = liftIO . putStrLn
 
 app :: App Done
 app = do
-  remoteSec1 <- liftNewRef (sec [15,30,11,6]) :: App (Server (Ref (Sec [Int])))
-  remoteSec2 <- liftNewRef False :: App (Server (Ref Bool))
-  gD <- remote $ getData remoteSec1
-  rA <- remote $ releaseAvg remoteSec2
-  gA <- remote $ getAvg remoteSec2 remoteSec1
+  remoteSt <- liftNewRef initServer :: App (Server (Ref ServerState))
+  sD    <- remote $ sendData remoteSt
+  getAv <- remote $ getAvg remoteSt
   runClient $ do
-    data1 <- onServer (gD <.> 3)
-    _     <- onServer rA
-    avg   <- onServer gA
-    let b = dummyCompOnData data1 avg
-    printCl $ "Is data less than avg? " <> show b
-  where
-    dummyCompOnData i av = int2Float i < av
+    printCl "Input salary : "
+    salary <- liftIO $ readLn :: Client Int
+    _   <- onServer (sD <.> salary)
+    avg <- onServer getAv
+    printCl $ "Average salary : " <> show avg
 
 
 main :: IO ()
