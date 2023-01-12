@@ -1,16 +1,11 @@
-{-# LANGUAGE CPP #-}
-module Main where
-
-import Control.Monad.IO.Class(liftIO)
-import System.IO
-import Text.Read
+module SecureWallet where
 
 import App
 
 #ifdef ENCLAVE
-import Server as API
+import Server
 #else
-import Client as API
+import Client
 #endif
 
 -- * Return codes
@@ -50,14 +45,12 @@ data Item = Item
     , username :: String
     , password :: String
     }
-  deriving (Show, Read)
 
 data Wallet = Wallet
     { items          :: [Item]
     , size           :: Int
     , masterPassword :: String
     }
-  deriving (Show, Read)
 
 newWallet :: Password -> Wallet
 newWallet mp = Wallet [] 0 mp
@@ -69,78 +62,71 @@ type Password = String
 passwordPolicy :: Password -> Bool
 passwordPolicy pass = length pass >= 8 && length pass + 1 <= maxItemSize
 
-loadWallet :: Server (Maybe Wallet)
-loadWallet = do
-  b <- API.doesFileExist wallet
-  unsafePrint (show b)
-  if b
-    then do contents <- API.readFile wallet
-            return $ (readMaybe contents :: Maybe Wallet)
-    else return Nothing
-
-saveWallet :: Wallet -> Server ()
-saveWallet w = API.writeFile wallet (show w)
-
-createWallet :: Password -> Server Int
-createWallet mp
+createWallet :: Server (Ref (Maybe Wallet)) -> Password -> Server Int
+createWallet srw mp
   | not $ passwordPolicy mp = return passwordOutOfRange
   | otherwise = do
-    w <- loadWallet
+    w <- readRef =<< srw
     case w of
         Just _  -> return walletAlreadyExists
-        Nothing -> saveWallet (newWallet mp) >> return retSuccess
+        Nothing -> srw >>= \r -> writeRef r (Just $ newWallet mp) >> return retSuccess
 
-changeMasterPassword :: Password -> Password -> Server Int
-changeMasterPassword old new
+changeMasterPassword :: Server (Ref (Maybe Wallet)) -> Password -> Password -> Server Int
+changeMasterPassword srw old new
   | not $ passwordPolicy new = return passwordOutOfRange
   | otherwise = do
-    w <- loadWallet
-    case w of
-      Nothing -> return cannotLoadWallet
-      Just w -> if masterPassword w == old
-                    then saveWallet (w { masterPassword = new }) >> return retSuccess
-                    else return wrongMasterPassword
+    w <- readRef =<< srw
+    if masterPassword w == old
+        then do r <- srw 
+                writeRef r (Just $ w { masterPassword = new })
+                return retSuccess
+        else return wrongMasterPassword
 
-addItem :: Password -> String -> String -> Password -> Server Int
-addItem mp item username pass
+addItem :: Server (Ref (Maybe Wallet)) -> Password -> String -> String -> Password -> Server Int
+addItem srw mp item username pass
   | length item + 1     > maxItemSize ||
     length username + 1 > maxItemSize ||
-    length pass + 1 > maxItemSize = return itemTooLong
+    length password + 1 > maxItemSize = return itemTooLong
   | otherwise = do
-    w <- loadWallet
+    w <- readRef =<< srw
     case w of
         Nothing -> return cannotLoadWallet
         Just w ->
             if masterPassword w == mp
-                -- FIXME check if item already exists
-                then saveWallet (w { items = (Item item username pass) : items w, size = size w + 1}) >> return retSuccess
+                then do r <- srw
+                        writeRef r (Just $ w { items = (Item item username pass) : items w, size = size w + 1})
+                        return retSuccess
                 else return wrongMasterPassword
 
-removeItem :: Password -> String -> Server Int
-removeItem mp item = do
-  w <- loadWallet
-  case w of
-      Nothing -> return cannotLoadWallet
-      Just w | not (item `elem` (map title (items w))) -> return itemDoesNotExist
-      Just w | not (masterPassword w == mp) -> return wrongMasterPassword
-      Just w -> saveWallet (w { items = filter (not . (==) item . title) (items w), size = size w - 1}) >> return retSuccess
+removeItem :: Server (Ref (Maybe Wallet)) -> Password -> String -> Server Int
+removeItem srw mp item = do
+    w <- readRef =<< srw
+    case w of
+        Nothing -> return cannotLoadWallet
+        Just w | not (item `elem` (map title (items w))) -> return itemDoesNotExist
+        Just w | not (masterPassword w == mp) -> return wrongMasterPassword
+        Just w -> do r <- srw
+                     writeRef r $ Just $ w { items = filter (not . (==) item . title) items, size = size w - 1}
+                     return retSuccess
 
 -- * The application
 
 data Api = Api
-    { create     :: Remote (Password -> Server Int)
-    , changePass :: Remote (Password -> Password -> Server Int)
-    , add        :: Remote (Password -> String -> String -> Password -> Server Int)
-    , remove     :: Remote (Password -> String -> Server Int)
-    }
+    { create     :: Server Int
+    , changePass :: Password -> Password -> Server Int
+    , add        :: String -> String -> Password -> Server Int
+    , remove     :: String -> Server Int}
 
 app :: App Done
 app = do
+    -- The data
+    walletref <- liftNewRef Nothing
+
     -- The api
-    create     <- remote $ createWallet
-    changePass <- remote $ changeMasterPassword
-    add        <- remote $ addItem
-    remove     <- remote $ removeItem
+    create     <- remote $ createWallet walletref
+    changePass <- remote $ changeMasterPassword walletref
+    add        <- remote $ addItem walletref
+    remove     <- remote $ removeItem walletref
 
     -- Client code
     runClient $ clientApp $ Api create changePass add remove
@@ -151,40 +137,35 @@ data Command
     | Add String String Password
     | Remove String
     | Shutoff
-  deriving Show
 
 clientApp :: Api -> Client ()
 clientApp api = do
     cmd <- getCommand
     case cmd of
         Shutoff -> liftIO (putStrLn "turning off...") >> return ()
-        _       -> do liftIO $ hPutStr stdout "master password: "
-                      liftIO $ hFlush stdout
-                      mp <- liftIO $ getLine
-                      r <- onServer $ case cmd of
-                             Create                      -> create api <.> mp
-                             Change old new              -> changePass api <.> old <.> new
-                             Add title username password -> add api <.> mp <.> title <.> username <.> password
-                             Remove title                -> remove api <.> mp <.> title
-                      printCode r
+        _       -> r <- onServer $ case cmd of
+                          Create                      -> create api
+                          Change old new              -> change api old new
+                          Add title username password -> add api title username password
+                          Remove title                -> remove api title
+                   printCode r
 
 getCommand :: Client Command
 getCommand = do
-    liftIO $ hPutStr stdout "> "
-    liftIO $ hFlush stdout
+    liftIO $ putStr ">"
     input <- liftIO $ getLine
     case input of
         [] -> getCommand
         s -> case tryParse s of
-            Just c -> return c
+            Just c -> return C
             Nothing -> getCommand
   where
-    tryParse :: String -> Maybe Command
+    tryParse :: String -> Just Command
     tryParse input = case words input of
         ["create"]                         -> Just Create
         ["change", old, new]               -> Just $ Change old new
         ["add", title, username, password] -> Just $ Add title username password
-        ["remove", title]                  -> Just $ Remove title
+        ["remote", title]                  -> Just $ Remove title
         ["shutoff"]                        -> Just Shutoff
         otherwise                          -> Nothing
 
@@ -197,7 +178,7 @@ printCode c
   | c == cannotLoadWallet    = liftIO $ putStrLn $ "= cannot load wallet"
   | c == wrongMasterPassword = liftIO $ putStrLn $ "= wrong master password"
   | c == walletFull          = liftIO $ putStrLn $ "= wallet is full"
-  | c == itemDoesNotExist    = liftIO $ putStrLn $ "= item does not exist"
+  | c == itemDoesNotExists   = liftIO $ putStrLn $ "= item does not exist"
   | c == itemTooLong         = liftIO $ putStrLn $ "= item is too long"
   | c == failSeal            = liftIO $ putStrLn $ "= failure while sealing wallet"
   | c == failUnseal          = liftIO $ putStrLn $ "= failure while unsealing wallet"

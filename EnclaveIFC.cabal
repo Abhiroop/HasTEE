@@ -71,6 +71,23 @@ executable EnclaveIFC-exe
     cpp-options: -DUMMY
   default-language: Haskell2010
 
+executable SecureWallet-exe
+  main-is: SecureWallet.hs
+  hs-source-dirs: examples/SecureWallet
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N -main-is SecureWallet
+  build-depends:
+      EnclaveIFC
+    , base >=4.7 && <5
+    , binary
+    , bytestring
+    , network-simple
+    , transformers
+  if (flag(enclave))
+    cpp-options: -DENCLAVE
+  else
+    cpp-options: -DUMMY
+  default-language: Haskell2010
+
 test-suite EnclaveIFC-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs

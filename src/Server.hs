@@ -9,12 +9,13 @@ module Server(module Server) where
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Trans.State.Strict
+import Control.Exception
 import Data.Binary(Binary, encode, decode)
 import Data.ByteString.Lazy(ByteString)
 import Data.IORef
 import Data.Maybe
 import Network.Simple.TCP
-import System.IO(hFlush, stdout)
+import System.IO
 import App
 
 import qualified Data.ByteString.Lazy as B
@@ -42,6 +43,8 @@ data Remote a = RemoteDummy
 serverConstant :: a -> App (Server a)
 serverConstant = return . return
 
+-- * Reference management
+
 liftNewRef :: a -> App (Server (Ref a))
 liftNewRef a = App $ do
   r <- liftIO $ newIORef a
@@ -55,6 +58,36 @@ readRef ref = Server $ readIORef ref
 
 writeRef :: Ref a -> a -> Server ()
 writeRef ref v = Server $ writeIORef ref v
+
+writeFile :: String -> String -> Server ()
+writeFile fp contents = Server (Prelude.writeFile fp contents)
+
+readFile :: String -> Server String
+readFile fp = Server (do handle <- openFile fp ReadMode
+                         contents <- hGetContents' handle
+                         putStrLn $ show contents
+                         hClose handle
+                         return contents)
+  where
+    hGetContents' :: Handle -> IO String
+    hGetContents' h = do
+      eof <- hIsEOF h
+      if eof
+        then
+          return []
+        else do
+          c <- hGetChar h
+          fmap (c:) $ hGetContents' h
+
+doesFileExist :: String -> Server Bool
+doesFileExist fp = Server $
+    (openFile fp ReadMode >>= hClose >> return True) `catch` \ex -> let e = ex :: SomeException
+                                                                    in return False
+
+unsafePrint :: String -> Server ()
+unsafePrint str = Server $ putStrLn str
+
+-- * Other stuff
 
 remote :: (Remotable a) => a -> App (Remote a)
 remote f = App $ do

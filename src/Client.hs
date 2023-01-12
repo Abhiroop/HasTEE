@@ -58,6 +58,17 @@ readRef _ = ServerDummy
 writeRef :: Ref a -> a -> Server ()
 writeRef _ _ = ServerDummy
 
+writeFile :: String -> String -> Server ()
+writeFile _ _ = ServerDummy
+
+readFile :: String -> Server String
+readFile _ = ServerDummy
+
+doesFileExist :: String -> Server Bool
+doesFileExist _ = ServerDummy
+
+unsafePrint :: String -> Server ()
+unsafePrint _ = ServerDummy
 
 type Client = IO
 
