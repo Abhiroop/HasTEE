@@ -7,7 +7,6 @@ import System.IO
 import Text.Read
 import Data.Binary
 import GHC.Generics
-import System.IO.Unsafe
 
 
 import App
@@ -46,7 +45,7 @@ maxItemSize :: Int
 maxItemSize = 100
 
 wallet :: String
-wallet = "wallet.seal"
+wallet = "/home/abhir00p/gramine/CI-Examples/hask-wallet/db/wallet.seal"
 
 -- * Data types
 
@@ -77,10 +76,6 @@ passwordPolicy pass = length pass >= 8 && length pass + 1 <= maxItemSize
 loadWallet :: Server (Maybe Wallet)
 loadWallet = do
   b <- API.doesFileExist wallet
-  let x = unsafePerformIO (putStrLn (show b))
-  if x == ()
-    then return ()
-    else return ()
   if b
     then do contents <- API.readFile wallet
             return $ (readMaybe contents :: Maybe Wallet)
