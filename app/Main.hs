@@ -1,9 +1,14 @@
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE CPP #-}
 module Main where
 
 import Control.Monad.IO.Class(liftIO)
 import System.IO
 import Text.Read
+import Data.Binary
+import GHC.Generics
+import System.IO.Unsafe
+
 
 import App
 
@@ -15,22 +20,22 @@ import Client as API
 
 -- * Return codes
 
-retSuccess, passwordOutOfRange, walletAlreadyExists :: Int
-retSuccess          = 0
-passwordOutOfRange  = 1
-walletAlreadyExists = 2
+data ReturnCode
+  = Success
+  | PasswordOutOfRange
+  | WalletAlreadyExists
+  | CannotSaveWallet
+  | CannotLoadWallet
+  | WrongMasterPassword
+  | WalletFull
+  | ItemDoesNotExist
+  | ItemAlreadyExists
+  | ItemTooLong
+  | FailSeal
+  | FailUnseal
+  deriving Generic
 
-cannotSaveWallet, cannotLoadWallet, wrongMasterPassword :: Int
-cannotSaveWallet    = 3
-cannotLoadWallet    = 4
-wrongMasterPassword = 5
-
-walletFull, itemDoesNotExist, itemTooLong, failSeal, failUnseal :: Int
-walletFull       = 6
-itemDoesNotExist = 7
-itemTooLong      = 8
-failSeal         = 9
-failUnseal       = 10
+instance Binary ReturnCode
 
 -- * Static values
 
@@ -72,84 +77,111 @@ passwordPolicy pass = length pass >= 8 && length pass + 1 <= maxItemSize
 loadWallet :: Server (Maybe Wallet)
 loadWallet = do
   b <- API.doesFileExist wallet
-  unsafePrint (show b)
+  let x = unsafePerformIO (putStrLn (show b))
+  if x == ()
+    then return ()
+    else return ()
   if b
     then do contents <- API.readFile wallet
             return $ (readMaybe contents :: Maybe Wallet)
     else return Nothing
 
-saveWallet :: Wallet -> Server ()
-saveWallet w = API.writeFile wallet (show w)
+saveWallet :: Wallet -> Server ReturnCode
+saveWallet w = API.writeFile wallet (show w) >> return Success
 
-createWallet :: Password -> Server Int
+createWallet :: Password -> Server ReturnCode
 createWallet mp
-  | not $ passwordPolicy mp = return passwordOutOfRange
+  | not $ passwordPolicy mp = return PasswordOutOfRange
   | otherwise = do
     w <- loadWallet
     case w of
-        Just _  -> return walletAlreadyExists
-        Nothing -> saveWallet (newWallet mp) >> return retSuccess
+        Just _  -> return WalletAlreadyExists
+        Nothing -> saveWallet (newWallet mp)
 
-changeMasterPassword :: Password -> Password -> Server Int
+changeMasterPassword :: Password -> Password -> Server ReturnCode
 changeMasterPassword old new
-  | not $ passwordPolicy new = return passwordOutOfRange
+  | not $ passwordPolicy new = return PasswordOutOfRange
   | otherwise = do
     w <- loadWallet
     case w of
-      Nothing -> return cannotLoadWallet
+      Nothing -> return CannotLoadWallet
       Just w -> if masterPassword w == old
-                    then saveWallet (w { masterPassword = new }) >> return retSuccess
-                    else return wrongMasterPassword
+                    then saveWallet (w { masterPassword = new })
+                    else return WrongMasterPassword
 
-addItem :: Password -> String -> String -> Password -> Server Int
+addItem :: Password -> String -> String -> Password -> Server ReturnCode
 addItem mp item username pass
   | length item + 1     > maxItemSize ||
     length username + 1 > maxItemSize ||
-    length pass + 1 > maxItemSize = return itemTooLong
+    length pass + 1 > maxItemSize = return ItemTooLong
   | otherwise = do
     w <- loadWallet
     case w of
-        Nothing -> return cannotLoadWallet
-        Just w ->
-            if masterPassword w == mp
-                -- FIXME check if item already exists
-                then saveWallet (w { items = (Item item username pass) : items w, size = size w + 1}) >> return retSuccess
-                else return wrongMasterPassword
+        Nothing -> return CannotLoadWallet
+        Just w | not (masterPassword w == mp) -> return WrongMasterPassword
+        Just w | itemExists item username (items w) -> return ItemAlreadyExists
+        Just w -> saveWallet (w { items = (Item item username pass) : items w, size = size w + 1})
 
-removeItem :: Password -> String -> Server Int
-removeItem mp item = do
+removeItem :: Password -> String -> String -> Server ReturnCode
+removeItem mp title' username' = do
   w <- loadWallet
   case w of
-      Nothing -> return cannotLoadWallet
-      Just w | not (item `elem` (map title (items w))) -> return itemDoesNotExist
-      Just w | not (masterPassword w == mp) -> return wrongMasterPassword
-      Just w -> saveWallet (w { items = filter (not . (==) item . title) (items w), size = size w - 1}) >> return retSuccess
+      Nothing -> return CannotLoadWallet
+      Just w | not (itemExists title' username' (items w)) -> return ItemDoesNotExist
+      Just w | not (masterPassword w == mp) -> return WrongMasterPassword
+      Just w -> let newitems = removeItem' title' username' (items w)
+                in saveWallet (w { items = newitems, size = size w - 1})
+  where    
+    removeItem' :: String -> String -> [Item] -> [Item]
+    removeItem' title' uname items =
+      filter (\t -> title t /= title' && username t /= uname) items
+
+showItem :: Password -> String -> String -> Server (Either ReturnCode Password)
+showItem mp title' username' = do
+  w <- loadWallet
+  case w of
+    Nothing -> return $ Left CannotLoadWallet
+    Just w | not (itemExists title' username' (items w)) -> return $ Left ItemDoesNotExist
+    Just w | not (masterPassword w == mp) -> return $ Left WrongMasterPassword
+    Just w -> return $ Right (findPass title' username' (items w))
+  where
+    findPass :: String -> String -> [Item] -> Password
+    findPass title' username' items =
+      let singleton = filter (\t -> title t == title' && username t == username') items
+      in password (head singleton)
+
+itemExists :: String -> String -> [Item] -> Bool
+itemExists title' uname items =
+  any (\t -> title t == title' && username t == uname) items
 
 -- * The application
 
 data Api = Api
-    { create     :: Remote (Password -> Server Int)
-    , changePass :: Remote (Password -> Password -> Server Int)
-    , add        :: Remote (Password -> String -> String -> Password -> Server Int)
-    , remove     :: Remote (Password -> String -> Server Int)
+    { create     :: Remote (Password -> Server ReturnCode)
+    , changePass :: Remote (Password -> Password -> Server ReturnCode)
+    , add        :: Remote (Password -> String -> String -> Password -> Server ReturnCode)
+    , remove     :: Remote (Password -> String -> String -> Server ReturnCode)
+    , showP      :: Remote (Password -> String -> String -> Server (Either ReturnCode String))
     }
 
 app :: App Done
 app = do
     -- The api
-    create     <- remote $ createWallet
-    changePass <- remote $ changeMasterPassword
-    add        <- remote $ addItem
-    remove     <- remote $ removeItem
+    create     <- ntimes 1 $ createWallet
+    changePass <- ntimes 1 $ changeMasterPassword
+    add        <- ntimes 1 $ addItem
+    remove     <- ntimes 1 $ removeItem
+    showP      <- ntimes 1 $ showItem
 
     -- Client code
-    runClient $ clientApp $ Api create changePass add remove
+    runClient $ clientApp $ Api create changePass add remove showP
 
 data Command
-    = Create
+    = Create Password
     | Change Password Password
-    | Add String String Password
-    | Remove String
+    | Add Password String String Password
+    | Remove Password String String
+    | Show Password String String
     | Shutoff
   deriving Show
 
@@ -157,50 +189,59 @@ clientApp :: Api -> Client ()
 clientApp api = do
     cmd <- getCommand
     case cmd of
-        Shutoff -> liftIO (putStrLn "turning off...") >> return ()
-        _       -> do liftIO $ hPutStr stdout "master password: "
-                      liftIO $ hFlush stdout
-                      mp <- liftIO $ getLine
-                      r <- onServer $ case cmd of
-                             Create                      -> create api <.> mp
-                             Change old new              -> changePass api <.> old <.> new
-                             Add title username password -> add api <.> mp <.> title <.> username <.> password
-                             Remove title                -> remove api <.> mp <.> title
-                      printCode r
+        Shutoff -> return ()
+        Create mp -> do
+          r <- onServer $ create api <.> mp
+          printCode r
+        Change old new -> do
+          r <- onServer $ changePass api <.> old <.> new
+          printCode r
+        Add mp title username password -> do
+          r <- onServer $ add api <.> mp <.> title <.> username <.> password
+          printCode r
+        Remove mp title username -> do
+          r <- onServer $ remove api <.> mp <.> title <.> username
+          printCode r
+        Show mp title username -> do
+          p <- onServer $ showP api <.> mp <.> title <.> username
+          case p of
+            Left code -> printCode code
+            Right pass -> liftIO $ putStrLn pass
 
 getCommand :: Client Command
 getCommand = do
-    liftIO $ hPutStr stdout "> "
-    liftIO $ hFlush stdout
-    input <- liftIO $ getLine
+    input <- liftIO $ getContents
     case input of
-        [] -> getCommand
+        [] -> usage >> return Shutoff
         s -> case tryParse s of
             Just c -> return c
-            Nothing -> getCommand
+            Nothing -> usage >> return Shutoff
   where
     tryParse :: String -> Maybe Command
     tryParse input = case words input of
-        ["create"]                         -> Just Create
-        ["change", old, new]               -> Just $ Change old new
-        ["add", title, username, password] -> Just $ Add title username password
-        ["remove", title]                  -> Just $ Remove title
-        ["shutoff"]                        -> Just Shutoff
-        otherwise                          -> Nothing
+        ["-n", mp]                        -> Just (Create mp)
+        ["-p", old, "-c", new]            -> Just (Change old new)
+        [ "-p", mp, "-a", "-title", title, "-username", username, "-password", password] -> Just (Add mp title username password)
+        [ "-p", mp, "-r", "-title", title, "-username", username] -> Just (Remove mp title username)
+        [ "-p", mp, "-s", "-title", title, "-username", username] -> Just (Show mp title username)
+        otherwise                -> Nothing
 
-printCode :: Int -> Client ()
-printCode c
-  | c == retSuccess          = liftIO $ putStrLn $ "# ok"
-  | c == passwordOutOfRange  = liftIO $ putStrLn $ "= password out of range"
-  | c == walletAlreadyExists = liftIO $ putStrLn $ "= wallet already exists"
-  | c == cannotSaveWallet    = liftIO $ putStrLn $ "= cannot save wallet"
-  | c == cannotLoadWallet    = liftIO $ putStrLn $ "= cannot load wallet"
-  | c == wrongMasterPassword = liftIO $ putStrLn $ "= wrong master password"
-  | c == walletFull          = liftIO $ putStrLn $ "= wallet is full"
-  | c == itemDoesNotExist    = liftIO $ putStrLn $ "= item does not exist"
-  | c == itemTooLong         = liftIO $ putStrLn $ "= item is too long"
-  | c == failSeal            = liftIO $ putStrLn $ "= failure while sealing wallet"
-  | c == failUnseal          = liftIO $ putStrLn $ "= failure while unsealing wallet"
+    usage :: Client ()
+    usage = liftIO $ putStrLn "<some helpful user manual>"
+
+printCode :: ReturnCode -> Client ()
+printCode Success             = liftIO $ putStrLn $ "# ok"
+printCode PasswordOutOfRange  = liftIO $ putStrLn $ "= password out of range"
+printCode WalletAlreadyExists = liftIO $ putStrLn $ "= wallet already exists"
+printCode CannotSaveWallet    = liftIO $ putStrLn $ "= cannot save wallet"
+printCode CannotLoadWallet    = liftIO $ putStrLn $ "= cannot load wallet"
+printCode WrongMasterPassword = liftIO $ putStrLn $ "= wrong master password"
+printCode WalletFull          = liftIO $ putStrLn $ "= wallet is full"
+printCode ItemDoesNotExist    = liftIO $ putStrLn $ "= item does not exist"
+printCode ItemAlreadyExists   = liftIO $ putStrLn $ "= item already exists"
+printCode ItemTooLong         = liftIO $ putStrLn $ "= item is too long"
+printCode FailSeal            = liftIO $ putStrLn $ "= failure while sealing wallet"
+printCode FailUnseal          = liftIO $ putStrLn $ "= failure while unsealing wallet"
 
 main :: IO ()
 main = do

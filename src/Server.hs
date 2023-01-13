@@ -65,7 +65,6 @@ writeFile fp contents = Server (Prelude.writeFile fp contents)
 readFile :: String -> Server String
 readFile fp = Server (do handle <- openFile fp ReadMode
                          contents <- hGetContents' handle
-                         putStrLn $ show contents
                          hClose handle
                          return contents)
   where
