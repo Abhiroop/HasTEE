@@ -212,22 +212,22 @@ getCommand :: Client Command
 getCommand = do
     input <- liftIO $ getContents
     case input of
-        [] -> usage >> return Shutoff
+        [] -> usage "<empty input>" >> return Shutoff
         s -> case tryParse s of
             Just c -> return c
-            Nothing -> usage >> return Shutoff
+            Nothing -> usage s >> return Shutoff
   where
     tryParse :: String -> Maybe Command
     tryParse input = case words input of
-        ["-n", mp]                        -> Just (Create mp)
+        ["-create", mp]                        -> Just (Create mp)
         ["-p", old, "-c", new]            -> Just (Change old new)
         [ "-p", mp, "-a", "-title", title, "-username", username, "-password", password] -> Just (Add mp title username password)
         [ "-p", mp, "-r", "-title", title, "-username", username] -> Just (Remove mp title username)
         [ "-p", mp, "-s", "-title", title, "-username", username] -> Just (Show mp title username)
         otherwise                -> Nothing
 
-    usage :: Client ()
-    usage = liftIO $ putStrLn "<some helpful user manual>"
+    usage :: String -> Client ()
+    usage str = liftIO $ putStrLn $ "<some helpful user manual>" ++ " : " ++ str
 
 printCode :: ReturnCode -> Client ()
 printCode Success             = liftIO $ putStrLn $ "# ok"
