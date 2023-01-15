@@ -45,7 +45,7 @@ maxItemSize :: Int
 maxItemSize = 100
 
 wallet :: String
-wallet = "/home/abhir00p/gramine/CI-Examples/hask-wallet/db/wallet.seal"
+wallet = "db/wallet.seal.pf"
 
 -- * Data types
 
