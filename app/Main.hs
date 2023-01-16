@@ -87,11 +87,11 @@ saveWallet w = API.writeFile wallet (show w) >> return Success
 createWallet :: Password -> Server ReturnCode
 createWallet mp
   | not $ passwordPolicy mp = return PasswordOutOfRange
-  | otherwise = saveWallet (newWallet mp)-- do
-    -- w <- loadWallet
-    -- case w of
-    --     Just _  -> return WalletAlreadyExists
-    --     Nothing -> saveWallet (newWallet mp)
+  | otherwise = do
+    w <- loadWallet
+    case w of
+        Just _  -> return WalletAlreadyExists
+        Nothing -> saveWallet (newWallet mp)
 
 changeMasterPassword :: Password -> Password -> Server ReturnCode
 changeMasterPassword old new
