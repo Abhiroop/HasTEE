@@ -5,6 +5,7 @@ import Control.Monad.IO.Class(liftIO)
 import Data.List(genericLength)
 import GHC.Float(int2Float)
 import App
+import Security.Sec
 
 #ifdef ENCLAVE
 import Server
