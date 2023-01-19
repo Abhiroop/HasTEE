@@ -1,6 +1,6 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.34.4.
+-- This file has been generated from package.yaml by hpack version 0.35.1.
 --
 -- see: https://github.com/sol/hpack
 
@@ -46,6 +46,10 @@ library
     , network-simple
     , transformers
   default-language: Haskell2010
+  if (flag(enclave))
+    cpp-options: -DENCLAVE
+  else
+    cpp-options: -DUMMY
 
 executable EnclaveIFC-exe
   main-is: Main.hs
@@ -65,11 +69,11 @@ executable EnclaveIFC-exe
     , bytestring
     , network-simple
     , transformers
+  default-language: Haskell2010
   if (flag(enclave))
     cpp-options: -DENCLAVE
   else
     cpp-options: -DUMMY
-  default-language: Haskell2010
 
 test-suite EnclaveIFC-test
   type: exitcode-stdio-1.0

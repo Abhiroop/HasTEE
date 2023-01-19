@@ -46,6 +46,12 @@ library:
     - bytestring
     - network-simple
     - transformers
+  when:
+    - condition: (flag(enclave))
+      then:
+        cpp-options: -DENCLAVE
+      else:
+        cpp-options: -DUMMY
 
 executables:
   EnclaveIFC-exe:
