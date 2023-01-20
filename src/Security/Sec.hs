@@ -65,6 +65,8 @@ import Control.Monad
 
 
 
+#ifdef ENCLAVE
+
 newtype Sec a = MkSec a -- dont export MkSec
 
 instance Monad Sec where
@@ -85,12 +87,29 @@ instance Applicative Sec where
 sec :: a -> Sec a
 sec = MkSec
 
-#ifdef ENCLAVE
-
 declassify :: Sec a -> a
 declassify (MkSec a) = a
 
 #else
+
+data Sec a = SecDummy
+
+instance Monad Sec where
+  return = pure
+
+  SecDummy >>= _ = SecDummy
+
+instance Functor Sec where
+  fmap = liftM
+
+instance Applicative Sec where
+  pure = sec
+  SecDummy <*> SecDummy = SecDummy
+
+
+--used to protect value `a`
+sec :: a -> Sec a
+sec _ = SecDummy
 
 declassify :: Sec a -> a
 declassify _ = error "Client cannot declassify"
