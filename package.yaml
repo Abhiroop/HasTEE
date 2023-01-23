@@ -45,6 +45,7 @@ library:
     - binary
     - bytestring
     - network-simple
+    - Paillier
     - transformers
   when:
     - condition: (flag(enclave))
@@ -73,6 +74,7 @@ executables:
     - binary
     - bytestring
     - network-simple
+    - Paillier
     - transformers
 
 tests:

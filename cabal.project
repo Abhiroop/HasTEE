@@ -1,2 +1,7 @@
 packages: ./*.cabal
 with-compiler: /home/abhir00p/ghc-8.8.2/inplace/bin/ghc-stage2
+
+source-repository-package
+    type: git
+    location: https://github.com/Abhiroop/HsPaillier.git
+    tag: b98e28809fcaef2806841fa09c1d0a742a2d1509
