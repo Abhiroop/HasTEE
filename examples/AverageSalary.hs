@@ -1,5 +1,5 @@
 {-# LANGUAGE CPP #-}
-module Main where
+module AverageSalary where
 
 import Control.Monad.IO.Class(liftIO)
 import GHC.Float(int2Float)
