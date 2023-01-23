@@ -34,6 +34,11 @@ remote _ = App $ do
 ntimes :: (Remotable a) => Int -> a -> App (Remote a)
 ntimes _ = remote
 
+flowlock :: Remotable a => a -> App (Remote a, Server (), Server ())
+flowlock f = do
+  r <- remote f
+  return (r, ServerDummy, ServerDummy)
+
 class Remotable a where
   mkRemote :: a -> ([ByteString] -> Server (Maybe ByteString))
 

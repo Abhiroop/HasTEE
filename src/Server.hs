@@ -73,8 +73,30 @@ ntimes n f = App $ do
                         else return Nothing
     in s) : remotes)
 
-
   return RemoteDummy
+
+flowlock :: Remotable a => a -> App (Remote a, Server (), Server ())
+flowlock f = App $ do
+  b <- liftIO $ newIORef False
+  (next_id, remotes) <- get
+  put (next_id + 1, (next_id, \bs ->
+    let Server s = do c <- Server $ readIORef b
+                      if c
+                        then mkRemote f bs
+                        else return Nothing
+    in s) : remotes)
+  return (RemoteDummy, Server (writeIORef b True), Server (writeIORef b False))
+
+-- flowlock :: (Remotable a) => a -> App (Remote a, Server (), Server ())
+-- flowlock f = App $ do
+--   b <- liftIO $ newIORef False
+--   (next_id, remotes) <- get
+--   put (next_id + 1, (next_id, \bs ->
+--     let Server s = do c <- Server $ readIORef b
+--                       if c
+--                         then mkRemote f bs
+--                         else return Nothing
+--     in return (remoteDummy, Server (writeIORef b True), Server (writeIORef b False))))
 
 (<.>) :: Binary a => Remote (a -> b) -> a -> Remote b
 (<.>) = error "Access to client not allowed"
