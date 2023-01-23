@@ -15,7 +15,7 @@ import Network.Simple.TCP
 
 -- mutable references
 liftNewRef :: a -> App (Server (Ref a))
-newRef :: a -> Server (Ref a)
+newRef     :: a -> Server (Ref a)
 readRef    :: Ref a -> Server a
 writeRef   :: Ref a -> a -> Server ()
 -- immutable value
