@@ -56,6 +56,7 @@ executable EnclaveIFC-exe
   main-is: Main.hs
   other-modules:
       FedLearnServer
+      FedLearnUtils
       FedLearnWorker
       Lattice
       Program
@@ -71,8 +72,11 @@ executable EnclaveIFC-exe
     , base >=4.7 && <5
     , binary
     , bytestring
+    , matrix
     , network-simple
+    , split
     , transformers
+    , vector
   default-language: Haskell2010
   if (flag(enclave))
     cpp-options: -DENCLAVE

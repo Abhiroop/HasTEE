@@ -13,8 +13,6 @@ import Server
 import Client
 #endif
 
-
-
 getData :: Server (Ref (Sec [Int])) -> Int -> Server Int
 getData serv_secret idx = do
   secret <- serv_secret

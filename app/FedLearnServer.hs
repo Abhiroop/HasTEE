@@ -1,6 +1,8 @@
 {-# LANGUAGE CPP #-}
 module FedLearnServer where
 
+import FedLearnUtils
+
 #ifdef ENCLAVE
 import Server
 #else
@@ -27,9 +29,9 @@ type IterN = Int
 aggregateModel :: Id -> IterN -> CipherText -> Server ()
 aggregateModel = undefined
 
-type Accuracy = Float
-type Loss = Float
-type DataSet = [[Float]] -- some dummy type
+type Accuracy = Double
+type Loss = Double
+type DataSet = [[Double]] -- some dummy type
 
 -- parse dataset; get x,y and call internal validate
 -- calculate acc and loss using self.updated_weights

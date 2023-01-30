@@ -76,6 +76,9 @@ executables:
     - network-simple
     - Paillier
     - transformers
+    - matrix
+    - split
+    - vector
 
 tests:
   EnclaveIFC-test:
