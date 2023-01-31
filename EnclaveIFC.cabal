@@ -58,6 +58,7 @@ executable EnclaveIFC-exe
       FedLearnServer
       FedLearnUtils
       FedLearnWorker
+      LogisticRegression
       Lattice
       Program
       Sec

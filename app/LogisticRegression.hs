@@ -1,50 +1,54 @@
-module LogisticRegression where
+module LogisticRegression (eval, fit, Config(..), baseConfig) where
 
-import Data.List
+import Data.Vector as V
+import Data.Matrix as M
+
+import Debug.Trace
 
 data Config = Config
     { epochs       :: Int
     , alpha        :: Double
     , learningRate :: Double
     , iterN        :: Int
-    , weights      :: [Double]
+    , weights      :: Vector Double
     }
   deriving Show
 
 baseConfig :: Config
 baseConfig = Config 100 0.01 0.15 0 (error "<uninitialized weights>")
 
-fit :: Config -> [[Double]] -> [Int] -> Config
+fit :: Config -> Matrix Double -> Vector Int -> Config
 fit cfg x y =
-    let m = length x
-        x' = map ((:) 1.0) x
-        n = length (head x')
-        x'' = transpose x'
-        lw = replicate n 1.0
+    let m = nrows x
+        x' = colVector (V.replicate m 1.0) <|> x
+        n = ncols x'
+        x'' = M.transpose x'
+        lw = V.replicate n 1.0
     in handleSingle 0 (epochs cfg) x'' (cfg { weights = lw })
   where
-    handleSingle :: Int -> Int -> [[Double]] -> Config -> Config
-    handleSingle n m x cfg
-        | n == m    = cfg
-        | otherwise = handleSingle (n+1) m x (updateModel (cfg { iterN = n }) $ computeGradient cfg x y)
+    handleSingle :: Int -> Int -> Matrix Double -> Config -> Config
+    handleSingle n m x' cfg'
+        | n == m    = cfg'
+        | otherwise = handleSingle (n+1) m x' (updateModel (cfg' { iterN = n }) $ computeGradient cfg' x' y)
 
-computeGradient :: Config -> [[Double]] -> [Int] -> [Double]
+computeGradient :: Config -> Matrix Double -> Vector Int -> Vector Double
 computeGradient cfg x y =
-    let m = length (head x)
-        yPred = map sigmoid $ dotprod (weights cfg) x
+    let m = ncols x
+        yPred = V.map sigmoid $ dotprod (weights cfg) x
      -- they pass in transpose here, not sure that we have to? double check
-    in map (\w -> w / (fromIntegral m)) $ dotprod (zipWith (\y1 y2 -> y1 - fromIntegral y2) yPred y) (transpose x)
+    in V.map (\w -> w / (fromIntegral m)) $ dotprod (V.zipWith (\y1 y2 -> y1 - fromIntegral y2) yPred y) (M.transpose x)
 
-dotprod :: [Double] -> [[Double]] -> [Double]
-dotprod w x = let x' = transpose x -- easier to do in Haskell if it is transposed here
-                  mapped = map (\dp -> zipWith (*) dp w) x'
-              in map sum mapped
+dotprod :: Vector Double -> Matrix Double -> Vector Double
+dotprod w x = let x' = M.transpose x
+                  i  = nrows x'
+                  mapped = V.fromList $ Prelude.map (\i' -> V.sum $ V.zipWith (*) (getRow i' x') w) [1..i]
+              in mapped
 
-updateModel :: Config -> [Double] -> Config
+updateModel :: Config -> Vector Double -> Config
 updateModel cfg grad =
     let lr = learningRate cfg / sqrt (1 + fromIntegral (iterN cfg))
-        gr = zipWith (+) grad (map (alpha cfg *) (weights cfg))
-        nw = zipWith (-) (weights cfg) (map (lr *) gr)
+        gr = V.zipWith (+) grad (V.map (alpha cfg *) (weights cfg))
+        nw = V.zipWith (-) (weights cfg) (V.map (lr *) gr)
     in cfg { weights = nw }
 
 sigmoid :: Double -> Double
@@ -53,12 +57,13 @@ sigmoid x = 1 / (1 + exp (-x))
 -- * test data
 
 -- did student pass the exam?
-testy :: [Int]
-testy = [0,0,0,0,0,0,1,0,1,0,1,0,1,0,1,1,1,1,1,1]
+testy :: Vector Int --[Int]
+testy = V.fromList [0,0,0,0,0,0,1,0,1,0,1,0,1,0,1,1,1,1,1,1]
 
 -- how many hours did student study?
-testx :: [[Double]]
-testx = [ [0.5]
+testx :: Matrix Double
+testx = M.fromLists 
+        [ [0.5]
         , [0.75]
         , [1.0]
         , [1.25]
@@ -80,8 +85,6 @@ testx = [ [0.5]
         , [5.5]
         ]
 
--- for the above test data, the returned weights should be -4.1 and 1.5
-
 eval :: IO ()
 eval = let cfg = fit baseConfig testx testy
-       in putStrLn $ concat [show (head (weights cfg)), " + ", show (last (weights cfg)), " * #hours-studied"]
+       in putStrLn $ Prelude.concat [show (V.head (weights cfg)), " + ", show (V.last (weights cfg)), " * #hours-studied"]

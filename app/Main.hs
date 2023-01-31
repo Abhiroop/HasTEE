@@ -6,6 +6,7 @@ import Data.List(genericLength)
 import GHC.Float(int2Float)
 import App
 import Security.Sec
+import LogisticRegression
 
 #ifdef ENCLAVE
 import Server
