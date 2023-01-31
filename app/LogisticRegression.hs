@@ -7,16 +7,16 @@ data Config = Config
     { epochs       :: Int
     , alpha        :: Double
     , learningRate :: Double
-    , interN       :: Int
+    , iterN        :: Int
     , weights      :: [Double]
     }
 
-fit :: Config -> [[Double]] -> [Double] -> Config
+fit :: Config -> [[Double]] -> [Int] -> Config
 fit cfg x y =
     let m = length x
         x' = map ((:) 1.0) x
         n = length (head x')
-        x' = transpose x'
+        x'' = transpose x'
         lw = replicate n 1.0
     in handleSingle 0 (epochs cfg) cfg
   where
@@ -25,14 +25,12 @@ fit cfg x y =
         | n == m    = cfg
         | otherwise = handleSingle (n+1) m (updateModel cfg $ computeGradient cfg x y)
 
-oneEpoch :: Config -> [[Double]] -> [Double] -> Config
-oneEpoch cfg x y = undefined
-
-computeGradient :: Config :: [[Double]] -> [Double] -> [Double]
+computeGradient :: Config -> [[Double]] -> [Int] -> [Double]
 computeGradient cfg x y =
     let m = length (head x)
-        yPred = map sigmoid $ dotprod (weights xfg) x
-    in map (\w -> w / m) $ dotprod yPred x -- they pass in transpose here, not sure that we have to? double check
+        yPred = map sigmoid $ dotprod (weights cfg) x
+     -- they pass in transpose here, not sure that we have to? double check
+    in map (\w -> w / (fromIntegral m)) $ dotprod (zipWith (\y1 y2 -> y1 - fromIntegral y2) yPred y) x
 
 dotprod :: [Double] -> [[Double]] -> [Double]
 dotprod w x = let x' = transpose x -- easier to do in Haskell if it is transposed here
@@ -41,7 +39,7 @@ dotprod w x = let x' = transpose x -- easier to do in Haskell if it is transpose
 
 updateModel :: Config -> [Double] -> Config
 updateModel cfg grad =
-    let lr = learningRate cfg / sqrt (1 + iterN cfg)
+    let lr = learningRate cfg / sqrt (1 + fromIntegral (iterN cfg))
         gr = zipWith (+) grad (map (alpha cfg *) (weights cfg))
         nw = zipWith (-) (weights cfg) (map (lr *) gr)
     in cfg { weights = nw }
