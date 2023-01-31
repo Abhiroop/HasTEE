@@ -1,12 +1,15 @@
 {-# LANGUAGE CPP #-}
 module Main where
 
+import qualified Data.Vector as V
+import Control.Monad
 import Control.Monad.IO.Class(liftIO)
 import Data.List(genericLength)
 import GHC.Float(int2Float)
 import App
 import Security.Sec
 import LogisticRegression
+import FedLearnUtils
 
 #ifdef ENCLAVE
 import Server
@@ -65,5 +68,14 @@ app = do
 
 main :: IO ()
 main = do
-  res <- runApp app
-  return $ res `seq` ()
+  (x,y) <- parseDataSet testDataSet
+  let w = weights $ fit baseConfig x y
+  zipWithM_ (\w o -> putStrLn (show w) >> putStrLn (show o) >> putStrLn "") (V.toList w) otherout
+--  putStrLn $ show w
+
+otherout = [ 1.13168292, -0.21312993,  0.09354092, -0.26391138, -0.17312359,  0.05455268,
+  -0.23395698, -0.33054974, -0.44401806,  0.20446647,  0.12975334, -0.14920247,
+   0.11039067, -0.19896242, -0.14983745,  0.02879726, -0.35788109, -0.46187986,
+  -0.50990152,  0.06687542,  0.47857546, -0.11103028,  0.6573644,  -0.15545855,
+  -0.01532559,  0.71608367,  0.02366001,  0.17972896, -0.07736812,  0.5992046,
+   0.40205282]
