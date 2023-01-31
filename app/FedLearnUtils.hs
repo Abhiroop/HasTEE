@@ -6,7 +6,7 @@ import Data.Vector (Vector, map)
 import GHC.Float (double2Int)
 
 testDataSet :: FilePath
-testDataSet = "/home/robert/Projects/EnclaveIFC/fed_dataset/breast_homo_host.csv"
+testDataSet = "fed_dataset/breast_homo_host.csv"
 
 csvToMatrix :: String -> Matrix Double
 csvToMatrix csv = fromLists [[read x :: Double | x <- splitOn "," row] | row <- tail (lines csv)]
