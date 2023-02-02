@@ -36,6 +36,11 @@ instance Monad Server where
     let Server ka = k a
     ka
 
+-- XXX: DANGEROUS!!!
+instance MonadIO Server where
+  liftIO = Server . liftIO
+-- XXX: DANGEROUS!!!
+
 
 data Remote a = RemoteDummy
 

@@ -66,6 +66,7 @@ app = do
     dummyCompOnData i av = int2Float i < av
 
 
+
 main :: IO ()
 main = do
   (x,y) <- parseDataSet testDataSet
