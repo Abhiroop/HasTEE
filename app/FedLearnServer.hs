@@ -11,7 +11,9 @@ import Client
 
 import Crypto.Paillier
 import Control.Monad.IO.Class(liftIO)
+import Data.Matrix
 import GHC.Float (int2Double)
+
 import qualified Data.Vector as V
 
 data SrvSt = SrvSt { publicKey  :: PubKey
@@ -56,15 +58,15 @@ aggregateModel ref_st iter_n wts = do
   let puK = publicKey  srvst
   let dict = wtsDict srvst
   let dict' = addWt iter_n wts dict
-  writeRef ref_st (srvst { wtsDict = dict'})
+  atomicWriteRef ref_st (srvst { wtsDict = dict'})
   if length (dict' ~> iter_n) == numClients srvst
-  then do
+  then do -- this point onwards logic needs review
     let prK = privateKey srvst
     let data_plain = map (V.map (decrypt prK puK)) (dict' ~> iter_n)
     let data_plain_d = map (V.map go2D) data_plain -- going to Double
     let sum_vec = foldr (V.zipWith (+)) V.empty data_plain_d
     let aggr_vec = V.map (/ int2Double (numClients srvst)) sum_vec
-    writeRef ref_st (srvst { updWts = aggr_vec })
+    atomicWriteRef ref_st (srvst { updWts = aggr_vec })
     reEncrypt puK aggr_vec
   else reEncrypt puK (updWts srvst)
   where
@@ -81,11 +83,32 @@ type Accuracy = Double
 type Loss = Double
 type DataSet = [[Double]] -- some dummy type
 
+
 -- parse dataset; get x,y and call internal validate
 -- calculate acc and loss using self.updated_weights
 -- see NOTE 1
-validate :: DataSet -> Server (Accuracy, Loss)
-validate = undefined
+validate :: Ref SrvSt -> Server (Accuracy, Loss)
+validate ref_st = do
+  srvst <- readRef ref_st
+  (x, y) <- liftIO $ parseDataSet testDataSet
+  let m = nrows x
+  let x' = colVector (V.replicate m 1.0) <|> x
+  -- let n = ncols x'
+  let yPred = V.map sigmoid $ dotprod (updWts srvst) x' -- check x or x'
+  let loss = (-1 / (int2Double m))
+           * (V.foldr (+) 0 $ addP (mulP (toD y) (logP yPred))
+                                   (mulP (subP 1 (toD y))
+                                         (logP (subP 1 yPred))))
+  let yPred' = V.map (\v -> if v < 0.5 then 0 else 1) yPred
+  let acc = (1 / (int2Double m))
+          * (V.sum $ V.map (\x -> if x then 1 else 0) $ V.zipWith (==) yPred' y)
+  return (acc, loss)
+  where
+    subP d vecd    = V.map (d -) vecd
+    mulP vec1 vec2 = V.zipWith (*) vec1 vec2
+    addP vec1 vec2 = V.zipWith (+) vec1 vec2
+    logP = V.map log
+    toD  = V.map int2Double
 
 finish :: Server ()
 finish = return () -- a no op to begin with; not splitting

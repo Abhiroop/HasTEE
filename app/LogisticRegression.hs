@@ -4,6 +4,7 @@ import Data.Vector as V
 import Data.Matrix as M
 
 import Debug.Trace
+import FedLearnUtils
 
 data Config = Config
     { epochs       :: Int
@@ -38,21 +39,12 @@ computeGradient cfg x y =
      -- they pass in transpose here, not sure that we have to? double check
     in V.map (\w -> w / (fromIntegral m)) $ dotprod (V.zipWith (\y1 y2 -> y1 - fromIntegral y2) yPred y) (M.transpose x)
 
-dotprod :: Vector Double -> Matrix Double -> Vector Double
-dotprod w x = let x' = M.transpose x
-                  i  = nrows x'
-                  mapped = V.fromList $ Prelude.map (\i' -> V.sum $ V.zipWith (*) (getRow i' x') w) [1..i]
-              in mapped
-
 updateModel :: Config -> Vector Double -> Config
 updateModel cfg grad =
     let lr = learningRate cfg / sqrt (1 + fromIntegral (iterN cfg))
         gr = V.zipWith (+) grad (V.map (alpha cfg *) (weights cfg))
         nw = V.zipWith (-) (weights cfg) (V.map (lr *) gr)
     in cfg { weights = nw }
-
-sigmoid :: Double -> Double
-sigmoid x = 1 / (1 + exp (-x))
 
 -- * test data
 

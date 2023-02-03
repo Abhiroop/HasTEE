@@ -61,6 +61,9 @@ readRef ref = Server $ readIORef ref
 writeRef :: Ref a -> a -> Server ()
 writeRef ref v = Server $ writeIORef ref v
 
+atomicWriteRef :: Ref a -> a -> Server ()
+atomicWriteRef ref v = Server $ atomicWriteIORef ref v
+
 remote :: (Remotable a) => a -> App (Remote a)
 remote f = App $ do
   (next_id, remotes) <- get

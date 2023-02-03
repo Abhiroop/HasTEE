@@ -69,7 +69,7 @@ app = do
 
 main :: IO ()
 main = do
-  (x,y) <- parseDataSet testDataSet
+  (x,y) <- parseDataSet trainingDataSet
   let w = weights $ fit baseConfig x y
   zipWithM_ (\w o -> putStrLn (show w) >> putStrLn (show o) >> putStrLn "") (V.toList w) otherout
 --  putStrLn $ show w
