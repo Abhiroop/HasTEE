@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE RecordWildCards #-}
 module FedLearnServer where
 
 import FedLearnUtils
@@ -9,8 +10,11 @@ import Server
 import Client
 #endif
 
+import App
+
 import Crypto.Paillier
 import Control.Monad.IO.Class(liftIO)
+import Data.Binary
 import Data.Matrix
 import GHC.Float (int2Double)
 
@@ -23,11 +27,34 @@ data SrvSt = SrvSt { publicKey  :: PubKey
                    , numClients :: Int
                    }
 
--- no of clients-
---               |
---               v
-initTEEState :: Int -> Server (Ref SrvSt)
-initTEEState num = do
+instance Binary PubKey where
+  put (PubKey {..}) = do
+    put bits
+    put nModulo
+    put generator
+    put nSquare
+  get = do
+    bits      <- get
+    nModulo   <- get
+    generator <- get
+    nSquare   <- get
+    return (PubKey {..})
+
+initSrvState :: SrvSt
+initSrvState =
+  SrvSt { publicKey  = error "Not initialised"
+        , privateKey = error "Not initialised"
+        , updWts     = V.empty
+        , wtsDict    = []
+        , numClients = 0
+        }
+
+-- no of clients ----------------------
+--                                     |
+--                                     v
+initTEEState :: Server (Ref SrvSt) -> Int -> Server ()
+initTEEState emptyRef num = do
+  ref <- emptyRef
   (pubK, prvK) <- liftIO $ genKey 1024
   let st = SrvSt { publicKey  = pubK
                  , privateKey = prvK
@@ -35,11 +62,12 @@ initTEEState num = do
                  , wtsDict    = []
                  , numClients = num
                  }
-  newRef st
+  writeRef ref st
 
-getPubKey :: Ref SrvSt -> Server PubKey
-getPubKey ref_st = do
-  srvst <- readRef ref_st
+getPubKey :: Server (Ref SrvSt) -> Server PubKey
+getPubKey srv_ref_st = do
+  ref_st <- srv_ref_st
+  srvst  <- readRef ref_st
   return (publicKey srvst)
 
 type Id = Int
@@ -49,12 +77,13 @@ type IterN = Int
 -- stores the updated_weights variable and returns the
 -- updated value back; if all the clients haven't responded
 -- it encrypts and send the old value back
-aggregateModel :: Ref SrvSt
+aggregateModel :: Server (Ref SrvSt)
                -> IterN
                -> V.Vector CipherText
                -> Server (V.Vector CipherText)
-aggregateModel ref_st iter_n wts = do
-  srvst <- readRef ref_st
+aggregateModel srv_ref_st iter_n wts = do
+  ref_st <- srv_ref_st
+  srvst  <- readRef ref_st
   let puK = publicKey  srvst
   let dict = wtsDict srvst
   let dict' = addWt iter_n wts dict
@@ -87,9 +116,10 @@ type DataSet = [[Double]] -- some dummy type
 -- parse dataset; get x,y and call internal validate
 -- calculate acc and loss using self.updated_weights
 -- see NOTE 1
-validate :: Ref SrvSt -> Server (Accuracy, Loss)
-validate ref_st = do
-  srvst <- readRef ref_st
+validate :: Server (Ref SrvSt) -> Server (Accuracy, Loss)
+validate srv_ref_st = do
+  ref_st <- srv_ref_st
+  srvst  <- readRef ref_st
   (x, y) <- liftIO $ parseDataSet testDataSet
   let m = nrows x
   let x' = colVector (V.replicate m 1.0) <|> x
