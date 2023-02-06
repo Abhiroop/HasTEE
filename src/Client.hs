@@ -58,6 +58,8 @@ readRef _ = ServerDummy
 writeRef :: Ref a -> a -> Server ()
 writeRef _ _ = ServerDummy
 
+atomicWriteRef :: Ref a -> a -> Server ()
+atomicWriteRef _ _ = ServerDummy
 
 type Client = IO
 
