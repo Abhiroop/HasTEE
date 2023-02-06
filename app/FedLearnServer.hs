@@ -140,9 +140,10 @@ validate srv_ref_st = do
     logP = V.map log
     toD  = V.map int2Double
 
-finish :: Server ()
-finish = return () -- a no op to begin with; not splitting
-                   -- the application into two parts now
+finish :: Server (Ref SrvSt) -> Server ()
+finish srv_ref_st = do
+  ref_st <- srv_ref_st
+  writeRef ref_st initSrvState -- effectively deleting the keys
 
 -- NOTE 1
 -- The validate function actually uses the weights to
