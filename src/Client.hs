@@ -20,6 +20,11 @@ data Ref a = RefDummy
 data Server a = ServerDummy deriving (Functor, Applicative, Monad)
 data Remote a = Remote CallID [ByteString]
 
+-- XXX: DANGEROUS!!!
+instance MonadIO Server where
+  liftIO = const ServerDummy
+-- XXX: DANGEROUS!!!
+
 (<.>) :: Binary a => Remote (a -> b) -> a -> Remote b
 (Remote identifier args) <.> arg =
   Remote identifier (encode arg : args)
