@@ -25,8 +25,7 @@ app = do
   server_st <- liftNewRef initSrvState :: App (Server (Ref SrvSt))
   initSt    <- remote $ initTEEState server_st
   getPubK   <- remote $ getPubKey server_st
-  -- aggrModel <- remote $ aggregateModel server_st
-  -- TODO: Binary instance for Vectors
+  aggrModel <- remote $ aggregateModel server_st
   validateM <- remote $ validate server_st
   runClient $ do
     _    <- onServer (initSt <.> noClients)

@@ -1,5 +1,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 module FedLearnServer where
 
 import FedLearnUtils
@@ -39,6 +40,12 @@ instance Binary PubKey where
     generator <- get
     nSquare   <- get
     return (PubKey {..})
+
+instance Binary a => Binary (V.Vector a) where
+  put vec_a = put $ V.toList vec_a
+  get = do
+    list_a <- get
+    return (V.fromList list_a)
 
 initSrvState :: SrvSt
 initSrvState =
