@@ -54,9 +54,15 @@ fit api cfg x y = do
     handleSingle n m x' cfg'
         | n == m    = return cfg'
         | otherwise = do
-            grad    <- computeGradient cfg' x' y
-            handleSingle (n+1) m x'
-              (updateModel (cfg' { iterN = n }) grad)
+            grad <- computeGradient cfg' x' y
+            let cfgNew = updateModel (cfg' { iterN = n }) grad
+            wt' <- onServer $ (aggrM api) <.> n <.> (weights cfgNew)
+            (acc, loss) <- onServer (valM api)
+            printCl $ "Iteration no: " <> show n
+                    <> " Accuracy: "   <> show acc
+                    <> " Loss : "      <> show loss
+            handleSingle (n+1) m x' (cfgNew { weights = wt' })
+
 
 computeGradient :: Config
                 -> Matrix Double
@@ -111,6 +117,6 @@ app = do
     _      <- onServer (initSt <.> noClients)
     pubK   <- onServer getPubK
     let config' = baseConfig { pubKey = pubK }
-    finalConfig <- fit api config' x y
+    _      <- fit api config' x y
     _      <- onServer fin
-    printCl "Hello"
+    printCl "Goodbye!"
