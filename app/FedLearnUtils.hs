@@ -1,4 +1,4 @@
-module FedLearnUtils ( parseDataSet, testDataSet, trainingDataSet
+module FedLearnUtils ( parseDataSet, testDataSet
                      , dotprod, dotprodHE, sigmoid, sigmoid_taylor_expand
                      , go2I, go2D, i2I) where
 
@@ -12,9 +12,6 @@ import GHC.Float (double2Int)
 
 testDataSet :: FilePath
 testDataSet = "fed_dataset/breast_homo_test.csv"
-
-trainingDataSet :: FilePath
-trainingDataSet = "fed_dataset/breast_homo_host.csv"
 
 csvToMatrix :: String -> Matrix Double
 csvToMatrix csv = fromLists [[read x :: Double | x <- splitOn "," row] | row <- tail (lines csv)]

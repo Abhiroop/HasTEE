@@ -10,9 +10,33 @@ import Client
 #endif
 
 import App
+import Control.Concurrent
+
+trainingDataSet1 :: FilePath
+trainingDataSet1 = "fed_dataset/breast_homo_guest.csv"
+
+trainingDataSet2 :: FilePath
+trainingDataSet2 = "fed_dataset/breast_homo_host.csv"
+
+dummyEnclaveTrainingFile :: FilePath
+dummyEnclaveTrainingFile = ""
+
+train :: FilePath -> IO ()
+train fp = do
+  res <- runApp (app fp)
+  return $ res `seq` ()
+
+startEnclave :: IO ()
+startEnclave = do
+  res <- runApp (app dummyEnclaveTrainingFile)
+  -- training not done in enclave
+  return $ res `seq` ()
 
 main :: IO ()
 main = do
-  res <- runApp app
-  return $ res `seq` ()
-
+#ifdef ENCLAVE
+  startEnclave
+#else
+  forkIO $ train trainingDataSet1
+  train trainingDataSet2
+#endif

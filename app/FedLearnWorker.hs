@@ -103,8 +103,8 @@ data API = API { aggrM :: Remote (IterN ->
                , valM  :: Remote (Server (Accuracy, Loss))
                }
 
-app :: App Done
-app = do
+app :: FilePath -> App Done
+app fp = do
   server_st <- liftNewRef initSrvState :: App (Server (Ref SrvSt))
   initSt    <- remote $ initTEEState server_st
   getPubK   <- remote $ getPubKey server_st
@@ -113,7 +113,7 @@ app = do
   fin       <- remote $ finish   server_st
   let api   = API aggrModel validateM
   runClient $ do
-    (x, y) <- liftIO $ parseDataSet trainingDataSet
+    (x, y) <- liftIO $ parseDataSet fp
     _      <- onServer (initSt <.> noClients)
     pubK   <- onServer getPubK
     let config' = baseConfig { pubKey = pubK }
