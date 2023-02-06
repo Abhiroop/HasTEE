@@ -1,6 +1,9 @@
 module FedLearnUtils ( parseDataSet, testDataSet, trainingDataSet
-                     , dotprod, sigmoid, go2I, go2D) where
+                     , dotprod, dotprodHE, sigmoid, sigmoid_taylor_expand
+                     , go2I, go2D, i2I) where
 
+import Control.Monad.IO.Class
+import Crypto.Paillier
 import Data.List.Split (splitOn)
 import Data.Matrix ( Matrix, fromLists, submatrix, nrows
                    , ncols, getCol, getRow, transpose)
@@ -24,14 +27,44 @@ parseDataSet fp = do
   let y = V.map double2Int $ getCol 2 mat
   return (x, y)
 
+dotprodHE :: (MonadIO m)
+          => PubKey
+          -> V.Vector CipherText
+          -> Matrix Double
+          -> m (V.Vector CipherText)
+dotprodHE pubk w x = do
+  let zero = go2I 0.0
+  enc_zero <- liftIO $ encrypt pubk zero
+  return $ V.fromList $
+    Prelude.map (\i' ->
+                   V.foldr (\c c' -> cipherMul pubk c c')
+                   enc_zero
+                   (V.zipWith (\d cipher -> cipherExp pubk cipher (go2I d))
+                    (getRow i' x')
+                    w)
+                )
+    [1..i]
+   where
+     x' = transpose x
+     i  = nrows x'
+
+
 dotprod :: V.Vector Double -> Matrix Double -> V.Vector Double
 dotprod w x = let x' = transpose x
                   i  = nrows x'
                   mapped = V.fromList $ Prelude.map (\i' -> V.sum $ V.zipWith (*) (getRow i' x') w) [1..i]
               in mapped
 
+-- `sigmoid` cannot work on encrypted values
+-- so we need `sigmoid_taylor_expand`
 sigmoid :: Double -> Double
 sigmoid x = 1 / (1 + exp (-x))
+
+sigmoid_taylor_expand :: MonadIO m => PubKey -> CipherText -> m CipherText
+sigmoid_taylor_expand pubK cipher = do
+  let val = 0.5
+  let enc_val = go2I val
+  return $ cipherMul pubK enc_val (cipherExp pubK cipher (go2I 0.25))
 
 -- 6 digits of precision
 precision :: Double
@@ -42,3 +75,6 @@ go2I = truncate . (* precision)
 
 go2D :: Integer -> Double
 go2D x = fromInteger x / precision
+
+i2I  :: Int -> Integer
+i2I = toInteger
