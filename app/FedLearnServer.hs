@@ -18,7 +18,6 @@ import Control.Monad.IO.Class(liftIO)
 import Data.Binary
 import Data.Matrix
 import GHC.Float (int2Double)
-
 import qualified Data.Vector as V
 
 data SrvSt = SrvSt { publicKey  :: PubKey
@@ -87,7 +86,7 @@ type IterN = Int
 aggregateModel :: Server (Ref SrvSt)
                -> IterN
                -> V.Vector CipherText
-               -> Server (V.Vector CipherText)
+               -> Server (Maybe (V.Vector CipherText))
 aggregateModel srv_ref_st iter_n wts = do
   ref_st <- srv_ref_st
   srvst  <- readRef ref_st
@@ -95,16 +94,16 @@ aggregateModel srv_ref_st iter_n wts = do
   let dict = wtsDict srvst
   let dict' = addWt iter_n wts dict
   atomicWriteRef ref_st (srvst { wtsDict = dict'})
-  if length (dict' ~> iter_n) == numClients srvst -- XXX actually lock until you have all data
-  then do -- this point onwards logic needs review
+  if length (dict' ~> iter_n) == numClients srvst
+  then do
     let prK = privateKey srvst
     let data_plain = map (V.map (decrypt prK puK)) (dict' ~> iter_n)
     let data_plain_d = map (V.map go2D) data_plain -- going to Double
-    let sum_vec = foldr (V.zipWith (+)) (head data_plain_d) (tail data_plain_d) -- XXX potential oddness, potentially fixed
+    let sum_vec = foldr (V.zipWith (+)) (head data_plain_d) (tail data_plain_d)
     let aggr_vec = V.map (/ int2Double (numClients srvst)) sum_vec
     atomicWriteRef ref_st (srvst { updWts = aggr_vec })
-    reEncrypt puK aggr_vec
-  else reEncrypt puK (updWts srvst)
+    fmap Just $ reEncrypt puK aggr_vec
+  else return Nothing
   where
     reEncrypt :: PubKey
               -> V.Vector Double

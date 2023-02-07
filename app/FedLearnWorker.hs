@@ -12,6 +12,7 @@ import App
 
 import FedLearnServer
 
+import Control.Concurrent(threadDelay)
 import Control.Monad.IO.Class(liftIO)
 
 import Crypto.Paillier
@@ -56,13 +57,22 @@ fit api cfg x y = do
         | otherwise = do
             grad <- computeGradient cfg' x' y
             let cfgNew = updateModel (cfg' { iterN = n }) grad
-            wt' <- onServer $ (aggrM api) <.> n <.> (weights cfgNew)
+            wt' <- retryOnServer $ (aggrM api) <.> n <.> (weights cfgNew)
             (acc, loss) <- onServer (valM api)
             printCl $ "Iteration no: " <> show n
                     <> " Accuracy: "   <> show acc
                     <> " Loss : "      <> show loss
             handleSingle (n+1) m x' (cfgNew { weights = wt' })
 
+retryOnServer :: Remote (Server (Maybe (V.Vector CipherText)))
+              -> Client (V.Vector CipherText)
+retryOnServer rem_srv = do
+  res <- onServer rem_srv
+  case res of
+    Nothing -> do
+      liftIO $ threadDelay 1000000
+      retryOnServer rem_srv
+    Just a -> return a
 
 computeGradient :: Config
                 -> Matrix Double
@@ -98,7 +108,7 @@ noClients = 2
 
 data API = API { aggrM :: Remote (IterN ->
                                   V.Vector CipherText ->
-                                  Server (V.Vector CipherText))
+                                  Server (Maybe (V.Vector CipherText)))
                , valM  :: Remote (Server (Accuracy, Loss))
                }
 
