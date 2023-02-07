@@ -95,12 +95,12 @@ aggregateModel srv_ref_st iter_n wts = do
   let dict = wtsDict srvst
   let dict' = addWt iter_n wts dict
   atomicWriteRef ref_st (srvst { wtsDict = dict'})
-  if length (dict' ~> iter_n) == numClients srvst
+  if length (dict' ~> iter_n) == numClients srvst -- XXX actually lock until you have all data
   then do -- this point onwards logic needs review
     let prK = privateKey srvst
     let data_plain = map (V.map (decrypt prK puK)) (dict' ~> iter_n)
     let data_plain_d = map (V.map go2D) data_plain -- going to Double
-    let sum_vec = foldr (V.zipWith (+)) V.empty data_plain_d
+    let sum_vec = foldr (V.zipWith (+)) (head data_plain_d) (tail data_plain_d) -- XXX potential oddness, potentially fixed
     let aggr_vec = V.map (/ int2Double (numClients srvst)) sum_vec
     atomicWriteRef ref_st (srvst { updWts = aggr_vec })
     reEncrypt puK aggr_vec

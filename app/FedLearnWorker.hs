@@ -73,7 +73,6 @@ computeGradient cfg x y = do
   prod  <- dotprodHE pubK (weights cfg) x
   yPred <- V.mapM (sigmoid_taylor_expand pubK) prod
   yEnc  <- V.mapM ((\e -> liftIO $ encrypt pubK e) . i2I) y
-  -- XXX:why M.transpose?
   prod' <- dotprodHE pubK (subPHE yPred yEnc) (M.transpose x)
   return $ V.map (\c -> cipherExp pubK c (go2I (1 / (fromIntegral m)))) prod'
   where
