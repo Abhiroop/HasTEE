@@ -1,6 +1,6 @@
 module FedLearnUtils ( parseDataSet, testDataSet
                      , dotprod, dotprodHE, sigmoid, sigmoid_taylor_expand
-                     , go2I, go2D, i2I) where
+                     , go2I, go2D, i2I, runProperties) where
 
 import Control.Monad.IO.Class
 import Crypto.Paillier
@@ -9,6 +9,8 @@ import Data.Matrix ( Matrix, fromLists, submatrix, nrows
                    , ncols, getCol, getRow, transpose)
 import qualified Data.Vector as V
 import GHC.Float (double2Int)
+
+import Test.QuickCheck
 
 testDataSet :: FilePath
 testDataSet = "fed_dataset/breast_homo_test.csv"
@@ -75,3 +77,20 @@ go2D x = fromInteger x / precision
 
 i2I  :: Int -> Integer
 i2I = toInteger
+
+eps :: Double
+eps = 0.000001
+
+-- * testing
+
+prop_d2i_id :: Double -> Bool
+prop_d2i_id d = abs (go2D (go2I d) - d) <= eps
+
+prop_i2d_id :: Integer -> Bool
+prop_i2d_id i = go2I (go2D i) == i
+
+-- this reports that the conversions work as expected, which is great
+runProperties :: IO ()
+runProperties = do
+  quickCheck $ withMaxSuccess 1000000 prop_d2i_id
+  quickCheck $ withMaxSuccess 1000000 prop_i2d_id

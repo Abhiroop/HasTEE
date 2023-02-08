@@ -78,6 +78,7 @@ executable EnclaveIFC-exe
     , split
     , transformers
     , vector
+    , QuickCheck
   default-language: Haskell2010
   if (flag(enclave))
     cpp-options: -DENCLAVE
