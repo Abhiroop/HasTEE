@@ -87,7 +87,7 @@ computeGradient cfg x y = do
   return $ V.map (\c -> cipherExp pubK c (go2I (1 / (fromIntegral m)))) prod'
   where
     pubK = pubKey cfg
-    subPHE  = V.zipWith (\v1 v2 -> cipherMul pubK v1 (-v2))
+    subPHE  = V.zipWith (\v1 v2 -> homoSub pubK v1 v2)
 
 updateModel :: Config -> Vector CipherText -> Config
 updateModel cfg grad =
@@ -97,8 +97,8 @@ updateModel cfg grad =
     in cfg { weights = nw }
     where
       pubK = pubKey cfg
-      addP = V.zipWith (\v1 v2 -> cipherMul pubK v1   v2)
-      subP = V.zipWith (\v1 v2 -> cipherMul pubK v1 (-v2))
+      addP = V.zipWith (\v1 v2 -> cipherMul pubK v1 v2)
+      subP = V.zipWith (\v1 v2 -> homoSub   pubK v1 v2)
 
 printCl :: String -> Client ()
 printCl = liftIO . putStrLn
