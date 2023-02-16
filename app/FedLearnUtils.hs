@@ -1,19 +1,22 @@
 module FedLearnUtils ( parseDataSet, testDataSet
-                     , dotprod, dotprodHE, sigmoid, sigmoid_taylor_expand
-                     , go2I, go2D, i2I, runProperties) where
+                     , dotprod, dotprodHE, dotprodHET, sigmoid, sigmoid_taylor_expand
+                     -- , go2I, go2D, i2I, runProperties
+                     ) where
 
 import Control.Monad.IO.Class
-import Crypto.Paillier
+import Crypto.PaillierRealNum
 import Data.List.Split (splitOn)
 import Data.Matrix ( Matrix, fromLists, submatrix, nrows
                    , ncols, getCol, getRow, transpose)
 import qualified Data.Vector as V
+import qualified Crypto.Paillier as P
 import GHC.Float (double2Int)
 
-import Test.QuickCheck
+import Debug.Trace
+-- import Test.QuickCheck
 
 testDataSet :: FilePath
-testDataSet = "fed_dataset/breast_homo_test.csv"
+testDataSet = "fed_dataset/breast_homo_test1.csv"
 
 csvToMatrix :: String -> Matrix Double
 csvToMatrix csv = fromLists [[read x :: Double | x <- splitOn "," row] | row <- tail (lines csv)]
@@ -27,18 +30,42 @@ parseDataSet fp = do
   return (x, y)
 
 dotprodHE :: (MonadIO m)
-          => PubKey
-          -> V.Vector CipherText
+          => P.PubKey
+          -> V.Vector CT
           -> Matrix Double
-          -> m (V.Vector CipherText)
+          -> m (V.Vector CT)
 dotprodHE pubk w x = do
-  let zero = go2I 0.0
-  enc_zero <- liftIO $ encrypt pubk zero
+  -- let zero = go2I 0.0
+  enc_zero <- liftIO $ encrypt pubk 0.0
   return $ V.fromList $
     Prelude.map (\i' ->
-                   V.foldr (\c c' -> cipherMul pubk c c')
+                   V.foldr (\c c' -> homoAdd pubk c c')
                    enc_zero
-                   (V.zipWith (\d cipher -> cipherExp pubk cipher (go2I d))
+                   (V.zipWith (\d cipher -> homoMul pubk cipher d)
+                    (getRow i' x')
+                    w)
+                )
+    [1..i]
+   where
+     x' = transpose x
+     i  = nrows x'
+
+
+foo = [1.0,1.0,1.0]
+
+dotprodHET :: (MonadIO m)
+           => P.PubKey
+           -> V.Vector Double
+           -> Matrix Double
+           -> m (V.Vector Double)
+dotprodHET pubk w x = do
+  -- let zero = go2I 0.0
+  -- enc_zero <- liftIO $ encrypt pubk 0.0
+  return $ V.fromList $
+    Prelude.map (\i' ->
+                   V.foldr (\c c' -> c + c')
+                   (trace  ("roopa: " <> (show $ (getRow i' x'))) $ 0)
+                   (V.zipWith (\d cipher -> cipher * d)
                     (getRow i' x')
                     w)
                 )
@@ -59,38 +86,38 @@ dotprod w x = let x' = transpose x
 sigmoid :: Double -> Double
 sigmoid x = 1 / (1 + exp (-x))
 
-sigmoid_taylor_expand :: MonadIO m => PubKey -> CipherText -> m CipherText
+sigmoid_taylor_expand :: MonadIO m => P.PubKey -> CT -> m CT
 sigmoid_taylor_expand pubK cipher = do
   let val = 0.5
-  let enc_val = go2I val
-  return $ cipherMul pubK enc_val (cipherExp pubK cipher (go2I 0.25))
+  enc_val <- liftIO $ encrypt pubK val --go2I val
+  return $ homoAdd pubK enc_val (homoMul pubK cipher 0.25)
 
 -- 6 digits of precision
-precision :: Double
-precision = 1000000
+-- precision :: Double
+-- precision = 1000000
 
-go2I :: Double -> Integer
-go2I = truncate . (* precision)
+-- go2I :: Double -> Integer
+-- go2I = truncate . (* precision)
 
-go2D :: Integer -> Double
-go2D x = fromInteger x / precision
+-- go2D :: Integer -> Double
+-- go2D x = fromInteger x / precision
 
-i2I  :: Int -> Integer
-i2I = toInteger
+-- i2I  :: Int -> Integer
+-- i2I = toInteger . (* (double2Int precision))
 
-eps :: Double
-eps = 0.000001
+-- eps :: Double
+-- eps = 0.000001
 
 -- * testing
 
-prop_d2i_id :: Double -> Bool
-prop_d2i_id d = abs (go2D (go2I d) - d) <= eps
+-- prop_d2i_id :: Double -> Bool
+-- prop_d2i_id d = abs (go2D (go2I d) - d) <= eps
 
-prop_i2d_id :: Integer -> Bool
-prop_i2d_id i = go2I (go2D i) == i
+-- prop_i2d_id :: Integer -> Bool
+-- prop_i2d_id i = go2I (go2D i) == i
 
 -- this reports that the conversions work as expected, which is great
-runProperties :: IO ()
-runProperties = do
-  quickCheck $ withMaxSuccess 1000000 prop_d2i_id
-  quickCheck $ withMaxSuccess 1000000 prop_i2d_id
+-- runProperties :: IO ()
+-- runProperties = do
+--   quickCheck $ withMaxSuccess 1000000 prop_d2i_id
+--   quickCheck $ withMaxSuccess 1000000 prop_i2d_id

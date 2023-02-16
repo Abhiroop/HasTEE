@@ -13,32 +13,44 @@ import Client
 
 import App
 
-import Crypto.Paillier
+import Crypto.PaillierRealNum
 import Control.Monad.IO.Class(liftIO)
 import Data.Binary
 import Data.Matrix
 import GHC.Float (int2Double)
 import qualified Data.Vector as V
+import qualified Crypto.Paillier as P
 
-data SrvSt = SrvSt { publicKey  :: PubKey
-                   , privateKey :: PrvKey
+data SrvSt = SrvSt { publicKey  :: P.PubKey
+                   , privateKey :: P.PrvKey
                    , updWts     :: V.Vector Double
-                   , wtsDict    :: Map
+                   , wtsDict    :: Map -- (key=IterN, value=[V.Vector CT])
                    , numClients :: Int
                    }
 
-instance Binary PubKey where
-  put (PubKey {..}) = do
+instance Binary P.PubKey where
+  put (P.PubKey {..}) = do
     put bits
     put nModulo
     put generator
     put nSquare
+    put maxInt
   get = do
     bits      <- get
     nModulo   <- get
     generator <- get
     nSquare   <- get
-    return (PubKey {..})
+    maxInt    <- get
+    return (P.PubKey {..})
+
+instance Binary P.PrvKey where
+  put (P.PrvKey {..}) = do
+    put lambda
+    put x
+  get = do
+    lambda <- get
+    x      <- get
+    return (P.PrvKey {..})
 
 instance Binary a => Binary (V.Vector a) where
   put vec_a = put $ V.toList vec_a
@@ -61,7 +73,7 @@ initSrvState =
 initTEEState :: Server (Ref SrvSt) -> Int -> Server ()
 initTEEState emptyRef num = do
   ref <- emptyRef
-  (pubK, prvK) <- liftIO $ genKey 1024
+  (pubK, prvK) <- liftIO $ P.genKey 1024
   let st = SrvSt { publicKey  = pubK
                  , privateKey = prvK
                  , updWts     = V.empty
@@ -70,11 +82,17 @@ initTEEState emptyRef num = do
                  }
   writeRef ref st
 
-getPubKey :: Server (Ref SrvSt) -> Server PubKey
+getPubKey :: Server (Ref SrvSt) -> Server P.PubKey
 getPubKey srv_ref_st = do
   ref_st <- srv_ref_st
   srvst  <- readRef ref_st
   return (publicKey srvst)
+
+getPrvKey :: Server (Ref SrvSt) -> Server P.PrvKey
+getPrvKey srv_ref_st = do
+  ref_st <- srv_ref_st
+  srvst  <- readRef ref_st
+  return (privateKey srvst)
 
 type Id = Int
 type IterN = Int
@@ -85,8 +103,8 @@ type IterN = Int
 -- it encrypts and send the old value back
 aggregateModel :: Server (Ref SrvSt)
                -> IterN
-               -> V.Vector CipherText
-               -> Server (Maybe (V.Vector CipherText))
+               -> V.Vector CT
+               -> Server (Maybe (V.Vector CT))
 aggregateModel srv_ref_st iter_n wts = do
   ref_st <- srv_ref_st
   srvst  <- readRef ref_st
@@ -97,21 +115,21 @@ aggregateModel srv_ref_st iter_n wts = do
   if length (dict' ~> iter_n) == numClients srvst
   then do
     let prK = privateKey srvst
-    let data_plain = map (V.map (decrypt prK puK)) (dict' ~> iter_n)
-    let data_plain_d = map (V.map go2D) data_plain -- going to Double
+    let data_plain_d = map (V.map (decrypt puK prK)) (dict' ~> iter_n)
+    --let data_plain_d = map (V.map go2D) data_plain -- going to Double
     let sum_vec = foldr (V.zipWith (+)) (head data_plain_d) (tail data_plain_d)
     let aggr_vec = V.map (/ int2Double (numClients srvst)) sum_vec
     atomicWriteRef ref_st (srvst { updWts = aggr_vec })
     fmap Just $ reEncrypt puK aggr_vec
   else return Nothing
   where
-    reEncrypt :: PubKey
+    reEncrypt :: P.PubKey
               -> V.Vector Double
-              -> Server (V.Vector CipherText)
-    reEncrypt pk d = V.mapM (encM pk) (V.map go2I d)
+              -> Server (V.Vector CT)
+    reEncrypt pk d = V.mapM (encM pk) d
 
-    encM :: PubKey -> PlainText -> Server CipherText
-    encM pk t = liftIO $ encrypt pk t
+    encM :: P.PubKey -> Double -> Server CT
+    encM pk d = liftIO $ encrypt pk d
 
 
 type Accuracy = Double
@@ -159,7 +177,7 @@ finish srv_ref_st = do
 
 
 -- I don't want to import `containers` X(
-type Map = [(IterN, [V.Vector CipherText])]
+type Map = [(IterN, [V.Vector CT])]
 
 member :: IterN -> Map -> Bool
 member _ [] = False
@@ -167,13 +185,13 @@ member iter_n ((i,_):xs)
   | i == iter_n = True
   | otherwise = member iter_n xs
 
-addWt :: IterN -> V.Vector CipherText -> Map -> Map
+addWt :: IterN -> V.Vector CT -> Map -> Map
 addWt iter_n wts [] = [(iter_n, [wts])]
 addWt iter_n wts ((i, vecs):xs)
   | i == iter_n = (i, wts:vecs) : xs
   | otherwise = (i, vecs) : addWt iter_n wts xs
 
-(~>) :: Map -> IterN -> [V.Vector CipherText]
+(~>) :: Map -> IterN -> [V.Vector CT]
 (~>) [] _ = error "Cannot arise as key is added before lookup always"
 (~>) ((i, v):xs) iter_n
   | i == iter_n = v
