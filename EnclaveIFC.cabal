@@ -80,6 +80,7 @@ executable EnclaveIFC-exe
     , transformers
     , vector
     , QuickCheck
+    , restricted-io-ifc
   default-language: Haskell2010
   if (flag(enclave))
     cpp-options: -DENCLAVE

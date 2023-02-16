@@ -1,6 +1,12 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE ScopedTypeVariables, RankNTypes, TypeApplications, FlexibleContexts, UndecidableInstances, MonoLocalBinds #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE MonoLocalBinds #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# OPTIONS_GHC -Wno-missing-methods #-}
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
@@ -16,6 +22,7 @@ import System.IO(hFlush, stdout)
 import App
 
 import IFCIO
+import Crypto.Paillier (EntropyPool)
 import Crypto.PaillierRealNum() -- only import this for the instance of EntropyIO IO
 
 import qualified Data.ByteString.Lazy as B
@@ -26,8 +33,17 @@ instance UnsafeFileIO Server where
   untrustedReadFile fp           = Server (fmap taint $ readFile fp)
   untrustedWriteFile fp contents = Server (writeFile fp contents)
 
-instance EntropyIO IO => EntropyIO Server where
+instance EntropyIO Server EntropyPool where
   genEntropyPool = Server (genEntropyPool)
+
+--
+
+instance UnsafeFileIO Client where
+  untrustedReadFile fp           = ClientDummy
+  untrustedWriteFile fp contents = ClientDummy
+
+instance EntropyIO Client EntropyPool where
+  genEntropyPool = ClientDummy
 
 -- restricted IO stuff XXX
 

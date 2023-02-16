@@ -94,6 +94,18 @@ getPrvKey srv_ref_st = do
   srvst  <- readRef ref_st
   return (privateKey srvst)
 
+reEncrypt :: Server (Ref SrvSt) -> CT -> Server CT
+reEncrypt srv_ref_st ct = do
+  ref_st <- srv_ref_st
+  srvst <- readRef ref_st
+  encrypt (publicKey srvst) $ decrypt (privateKey srvst) (publicKey srvst) ct
+
+reEncryptMany :: Server (Ref SrvSt) -> V.Vector CT -> Server (V.Vector CT)
+reEncryptMany srv_ref_st cts = do
+  ref_st <- srv_ref_st
+  srvst <- readRef ref_st
+  mapM (encrypt (publicKey srvst) . decrypt (privateKey srvst) (publicKey srvst)) cts
+
 type Id = Int
 type IterN = Int
 
@@ -115,7 +127,7 @@ aggregateModel srv_ref_st iter_n wts = do
   if length (dict' ~> iter_n) == numClients srvst
   then do
     let prK = privateKey srvst
-    let data_plain_d = map (V.map (decrypt puK prK)) (dict' ~> iter_n)
+    let data_plain_d = map (V.map (decrypt prK puK)) (dict' ~> iter_n)
     --let data_plain_d = map (V.map go2D) data_plain -- going to Double
     let sum_vec = foldr (V.zipWith (+)) (head data_plain_d) (tail data_plain_d)
     let aggr_vec = V.map (/ int2Double (numClients srvst)) sum_vec
@@ -148,7 +160,7 @@ validate srv_ref_st = do
   let m = nrows x
   let x' = colVector (V.replicate m 1.0) <|> x
   -- let n = ncols x'
-  let yPred = V.map sigmoid $ dotprod (updWts srvst) x' -- check x or x'
+  let yPred = V.map sigmoid $ dotprod (updWts srvst) (transpose x') -- check x or x'
   let loss = (-1 / (int2Double m))
            * (V.foldr (+) 0 $ addP (mulP (toD y) (logP yPred))
                                    (mulP (subP 1 (toD y))

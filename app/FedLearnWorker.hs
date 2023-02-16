@@ -59,11 +59,12 @@ fit api cfg x y = do
         | n == m    = return cfg'
         | otherwise = do
             prv <- onServer (gpK api)
-            grad <- computeGradient prv cfg' x' y
+            grad <- computeGradient api prv cfg' x' y
             -- liftIO $ print "Abhi"
             -- liftIO $ print $ V.map (decrypt (pubKey cfg') prv) grad
-            let cfgNew = updateModel (cfg' { iterN = n }) grad
+            cfgNew <- updateModel api (cfg' { iterN = n }) grad
             wt' <- retryOnServer $ (aggrM api) <.> n <.> (weights cfgNew)
+            printCl $ Prelude.concat ["weights: ", show (V.map (decrypt prv (pubKey cfgNew)) wt')]
             (acc, loss) <- onServer (valM api)
             printCl $ "Iteration no: " <> show n
                     <> " Accuracy: "   <> show acc
@@ -80,43 +81,72 @@ retryOnServer rem_srv = do
       retryOnServer rem_srv
     Just a -> return a
 
-computeGradient :: P.PrvKey -> Config
+computeGradient :: API
+                -> P.PrvKey
+                -> Config
                 -> Matrix Double
                 -> Vector Int
                 -> Client (Vector CT)
-computeGradient prv cfg x y = do
+computeGradient api prv cfg x y = do
   let m = ncols x
-
-  -- let w' = V.map (decrypt (pubKey cfg) prv) (weights cfg)
-  -- liftIO $ print $ "Weights " <> show w'
-  -- let foo = dotprod w' x
-  -- liftIO $ print $ "Dotprod " <> show foo
-
-  prod  <- dotprodHE pubK (weights cfg) x
-
-  -- let prod' = V.map (decrypt (pubKey cfg) prv) prod
-  -- liftIO $ print $ "DotProdHE " <> show prod'
-  -- prod'' <- dotprodHET pubK w' x
-  -- liftIO $ print $ "DotProdHET " <> show prod''
-
-  yPred <- V.mapM (sigmoid_taylor_expand pubK) prod
+  prod  <- dotprodHEC api pubK (weights cfg) x
+  yPred <- V.mapM (sigmoid_taylor_expandC api pubK) prod
   yEnc  <- V.mapM ((\e -> liftIO $ encrypt pubK e) . int2Double) y
-  prod' <- dotprodHE pubK (subPHE yPred yEnc) (M.transpose x)
-  return $ V.map (\c -> homoMul pubK c (1 / (fromIntegral m))) prod'
+  prod' <- do
+    op <- subPHE yPred yEnc
+    dotprodHEC api pubK op (M.transpose x)
+  onServer $ recryptMany api <.> V.map (\c -> homoMul pubK c (1 / (fromIntegral m))) prod'
   where
     pubK = pubKey cfg
-    subPHE  = V.zipWith (\v1 v2 -> homoSub pubK v1 v2)
+    subPHE xs ys = onServer $ recryptMany api <.> V.zipWith (\v1 v2 -> homoSub pubK v1 v2) xs ys
 
-updateModel :: Config -> Vector CT -> Config
-updateModel cfg grad =
+-- | Dot product that reencrypts the CT between any two operations
+dotprodHEC :: API
+           -> P.PubKey
+           -> V.Vector CT
+           -> Matrix Double
+           -> Client (V.Vector CT)
+dotprodHEC api pubk w x = do
+  -- let zero = go2I 0.0
+  enc_zero <- liftIO $ encrypt pubk 0.0
+  vec <- flip Prelude.mapM [1..i] $ \i' -> do
+    let dots = V.zipWith (\d cipher -> homoMul pubk cipher d) (getRow i' x') w
+    dots' <- onServer $ recryptMany api <.> dots
+    V.foldM (\c c' -> onServer $ recrypt api <.> homoAdd pubk c c') enc_zero dots'
+  return $ V.fromList vec
+   where
+     x' = transpose x
+     i  = nrows x'
+
+sigmoid_taylor_expandC :: API -> P.PubKey -> CT -> Client CT
+sigmoid_taylor_expandC api pubK cipher = do
+  let val = 0.5
+  enc_val <- liftIO $ encrypt pubK val --go2I val
+  first <- onServer $ recrypt api <.> homoMul pubK cipher 0.25
+  onServer $ recrypt api <.> homoAdd pubK enc_val first
+
+updateModel :: API -> Config -> Vector CT -> Client Config
+updateModel api cfg grad = do
     let lr = learningRate cfg / sqrt (1 + fromIntegral (iterN cfg))
-        gr = addP grad (V.map (\w -> homoMul pubK w (alpha cfg)) (weights cfg))
-        nw = subP (weights cfg) (V.map (\g -> homoMul pubK g lr) gr)
-    in cfg { weights = nw }
+    gr <- do
+      let op = V.map (\w -> homoMul pubK w (alpha cfg)) (weights cfg)
+      op' <- onServer $ recryptMany api <.> op
+      addP grad op'
+    nw <- do
+      let op = V.map (\g -> homoMul pubK g lr) gr
+      op' <- onServer $ recryptMany api <.> op
+      subP (weights cfg) op'
+        -- gr = addP grad (V.map (\w -> homoMul pubK w (alpha cfg)) (weights cfg))
+        -- nw = subP (weights cfg) (V.map (\g -> homoMul pubK g lr) gr)
+    return cfg { weights = nw }
     where
       pubK = pubKey cfg
-      addP = V.zipWith (\v1 v2 -> homoAdd pubK v1 v2)
-      subP = V.zipWith (\v1 v2 -> homoSub pubK v1 v2)
+      addP xs ys = do
+        let res = V.zipWith (\v1 v2 -> homoAdd pubK v1 v2) xs ys
+        onServer $ recryptMany api <.> res
+      subP xs ys = do
+        let res = V.zipWith (\v1 v2 -> homoSub pubK v1 v2) xs ys
+        onServer $ recryptMany api <.> res
 
 printCl :: String -> Client ()
 printCl = liftIO . putStrLn
@@ -129,6 +159,8 @@ data API = API { aggrM :: Remote (IterN ->
                                   Server (Maybe (V.Vector CT)))
                , valM  :: Remote (Server (Accuracy, Loss))
                , gpK   :: Remote (Server P.PrvKey)
+               , recrypt :: Remote (CT -> Server CT)
+               , recryptMany :: Remote (V.Vector CT -> Server (V.Vector CT))
                }
 
 app :: FilePath -> App Done
@@ -140,7 +172,9 @@ app fp = do
   aggrModel <- remote $ aggregateModel server_st
   validateM <- remote $ validate server_st
   fin       <- remote $ finish   server_st
-  let api   = API aggrModel validateM getPrK
+  re        <- remote $ reEncrypt server_st
+  remany    <- remote $ reEncryptMany server_st
+  let api   = API aggrModel validateM getPrK re remany
   runClient $ do
     (x, y) <- liftIO $ parseDataSet fp
     _      <- onServer (initSt <.> noClients)

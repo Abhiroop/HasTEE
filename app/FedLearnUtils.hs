@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 module FedLearnUtils ( parseDataSet, testDataSet
                      , dotprod, dotprodHE, dotprodHET, sigmoid, sigmoid_taylor_expand
                      -- , go2I, go2D, i2I, runProperties
@@ -13,6 +14,8 @@ import qualified Crypto.Paillier as P
 import GHC.Float (double2Int)
 
 import Debug.Trace
+import IFCIO
+import Crypto.Paillier (EntropyPool)
 -- import Test.QuickCheck
 
 testDataSet :: FilePath
@@ -29,7 +32,7 @@ parseDataSet fp = do
   let y = V.map double2Int $ getCol 2 mat
   return (x, y)
 
-dotprodHE :: (MonadIO m)
+dotprodHE :: (MonadIO m, RestrictedIO m EntropyPool)
           => P.PubKey
           -> V.Vector CT
           -> Matrix Double
@@ -53,7 +56,7 @@ dotprodHE pubk w x = do
 
 foo = [1.0,1.0,1.0]
 
-dotprodHET :: (MonadIO m)
+dotprodHET :: (MonadIO m, RestrictedIO m EntropyPool)
            => P.PubKey
            -> V.Vector Double
            -> Matrix Double
@@ -86,7 +89,7 @@ dotprod w x = let x' = transpose x
 sigmoid :: Double -> Double
 sigmoid x = 1 / (1 + exp (-x))
 
-sigmoid_taylor_expand :: MonadIO m => P.PubKey -> CT -> m CT
+sigmoid_taylor_expand :: (MonadIO m, RestrictedIO m EntropyPool) => P.PubKey -> CT -> m CT
 sigmoid_taylor_expand pubK cipher = do
   let val = 0.5
   enc_val <- liftIO $ encrypt pubK val --go2I val

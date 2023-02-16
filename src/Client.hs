@@ -1,6 +1,10 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE ScopedTypeVariables, RankNTypes, TypeApplications #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 {-# OPTIONS_GHC -Wno-missing-methods #-}
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
@@ -13,11 +17,27 @@ import Data.ByteString.Lazy(ByteString)
 import Data.Binary(Binary, encode, decode)
 import Network.Simple.TCP
 import App
-
+import Crypto.Paillier (EntropyPool)
+import IFCIO
 
 data Ref a = RefDummy
 data Server a = ServerDummy deriving (Functor, Applicative, Monad)
 data Remote a = Remote CallID [ByteString]
+
+-- restricted IO stuff XXX
+
+instance UnsafeFileIO Server where
+  untrustedReadFile _    = ServerDummy
+  untrustedWriteFile _ _ = ServerDummy
+
+instance EntropyIO Server EntropyPool where
+  genEntropyPool = ServerDummy
+
+-- client
+
+-- imported from Paillier
+
+-- restricted IO stuff XXX
 
 -- XXX: DANGEROUS!!!
 instance MonadIO Server where
@@ -78,7 +98,7 @@ tryServer (Remote identifier args) = do
   {- SENDING REQUEST HERE -}
   connect localhost connectPort $ \(connectionSocket, remoteAddr) -> do
     -- debug logs
-    putStrLn $ "Connection established to " ++ show remoteAddr
+--    putStrLn $ "Connection established to " ++ show remoteAddr
     sendLazy connectionSocket $ createPayload (identifier, reverse args)
     resp <- readTCPSocket connectionSocket
     return $ fmap decode (decode resp :: Maybe ByteString)
