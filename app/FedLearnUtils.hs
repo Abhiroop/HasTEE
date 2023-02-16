@@ -67,7 +67,7 @@ dotprodHET pubk w x = do
   return $ V.fromList $
     Prelude.map (\i' ->
                    V.foldr (\c c' -> c + c')
-                   (trace  ("roopa: " <> (show $ (getRow i' x'))) $ 0)
+                   0
                    (V.zipWith (\d cipher -> cipher * d)
                     (getRow i' x')
                     w)

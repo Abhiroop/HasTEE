@@ -12,7 +12,7 @@ import App
 
 import FedLearnServer
 
-import Control.Concurrent(threadDelay)
+import Control.Concurrent(threadDelay, myThreadId)
 import Control.Monad.IO.Class(liftIO)
 
 import Crypto.PaillierRealNum
@@ -58,17 +58,18 @@ fit api cfg x y = do
     handleSingle n m x' cfg'
         | n == m    = return cfg'
         | otherwise = do
+            tid <- liftIO $ myThreadId
             prv <- onServer (gpK api)
             grad <- computeGradient api prv cfg' x' y
             -- liftIO $ print "Abhi"
             -- liftIO $ print $ V.map (decrypt (pubKey cfg') prv) grad
             cfgNew <- updateModel api (cfg' { iterN = n }) grad
             wt' <- retryOnServer $ (aggrM api) <.> n <.> (weights cfgNew)
-            printCl $ Prelude.concat ["weights: ", show (V.map (decrypt prv (pubKey cfgNew)) wt')]
             (acc, loss) <- onServer (valM api)
-            printCl $ "Iteration no: " <> show n
-                    <> " Accuracy: "   <> show acc
-                    <> " Loss : "      <> show loss
+            printCl $  "Client no: "     <> (show tid) -- $ clno cfg')
+                    <> " Iteration no: " <> show n
+                    <> " Accuracy: "     <> show acc
+                    <> " Loss : "        <> show loss
             handleSingle (n+1) m x' (cfgNew { weights = wt' })
 
 retryOnServer :: Remote (Server (Maybe (V.Vector CT)))
