@@ -46,6 +46,7 @@ library
     , bytestring
     , network-simple
     , transformers
+    , restricted-io-ifc
   default-language: Haskell2010
   if (flag(enclave))
     cpp-options: -DENCLAVE

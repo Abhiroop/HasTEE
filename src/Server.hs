@@ -1,23 +1,35 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE ScopedTypeVariables, RankNTypes, TypeApplications #-}
+{-# LANGUAGE ScopedTypeVariables, RankNTypes, TypeApplications, FlexibleContexts, UndecidableInstances, MonoLocalBinds #-}
 {-# OPTIONS_GHC -Wno-missing-methods #-}
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
 module Server(module Server) where
 
-import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Trans.State.Strict
 import Data.Binary(Binary, encode, decode)
 import Data.ByteString.Lazy(ByteString)
 import Data.IORef
-import Data.Maybe
 import Network.Simple.TCP
 import System.IO(hFlush, stdout)
 import App
 
+import IFCIO
+import Crypto.PaillierRealNum() -- only import this for the instance of EntropyIO IO
+
 import qualified Data.ByteString.Lazy as B
+
+-- restricted IO stuff XXX
+
+instance UnsafeFileIO Server where
+  untrustedReadFile fp           = Server (fmap taint $ readFile fp)
+  untrustedWriteFile fp contents = Server (writeFile fp contents)
+
+instance EntropyIO IO => EntropyIO Server where
+  genEntropyPool = Server (genEntropyPool)
+
+-- restricted IO stuff XXX
 
 type Ref a = IORef a
 newtype Server a = Server (IO a)

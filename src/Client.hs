@@ -7,7 +7,6 @@
 module Client(module Client) where
 
 import Data.Maybe
-import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Trans.State.Strict
 import Data.ByteString.Lazy(ByteString)
