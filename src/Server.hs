@@ -86,6 +86,27 @@ doesFileExist fp = Server $
 unsafePrint :: String -> Server ()
 unsafePrint str = Server $ putStrLn str
 
+-- * Secure file io
+
+securePath :: String
+securePath = "db/"
+
+data SecureFilePath = SecureFilePath String
+
+createSecurePath :: FilePath -> SecureFilePath
+createSecurePath fp = SecureFilePath $ securePath <> fp
+
+readSecureFile :: SecureFilePath -> Server String
+readSecureFile (SecureFilePath fp) = Server.readFile fp
+
+writeSecureFile :: SecureFilePath -> String -> Server ()
+writeSecureFile (SecureFilePath fp) str = Server.writeFile fp str
+
+doesSecureFileExist :: SecureFilePath -> Server Bool
+doesSecureFileExist (SecureFilePath fp) = Server.doesFileExist fp
+
+--
+
 -- * Other stuff
 
 remote :: (Remotable a) => a -> App (Remote a)

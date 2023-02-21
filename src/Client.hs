@@ -70,6 +70,26 @@ doesFileExist _ = ServerDummy
 unsafePrint :: String -> Server ()
 unsafePrint _ = ServerDummy
 
+--
+
+securePath :: String
+securePath = ""
+
+data SecureFilePath = SecureFilePath String
+
+createSecurePath :: FilePath -> SecureFilePath
+createSecurePath fp = SecureFilePath $ securePath <> fp
+
+readSecureFile :: SecureFilePath -> Server String
+readSecureFile (SecureFilePath fp) = Client.readFile fp
+
+writeSecureFile :: SecureFilePath -> String -> Server ()
+writeSecureFile (SecureFilePath fp) str = Client.writeFile fp str
+
+doesSecureFileExist :: SecureFilePath -> Server Bool
+doesSecureFileExist (SecureFilePath fp) = Client.doesFileExist fp
+--
+
 type Client = IO
 
 
