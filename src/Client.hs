@@ -5,6 +5,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# OPTIONS_GHC -Wno-missing-methods #-}
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
@@ -32,6 +33,12 @@ instance UnsafeFileIO Server where
 
 instance EntropyIO Server EntropyPool where
   genEntropyPool = ServerDummy
+
+instance RandomIO Server where
+  type Gen Server = ()
+  newGen = ServerDummy
+  splitGen _ = ServerDummy
+  uniFromGen _ _ = ServerDummy
 
 -- client
 

@@ -44,6 +44,7 @@ library
     , base >=4.7 && <5
     , binary
     , bytestring
+    , random
     , network-simple
     , transformers
     , restricted-io-ifc
@@ -74,6 +75,7 @@ executable EnclaveIFC-exe
     , base >=4.7 && <5
     , binary
     , bytestring
+    , random
     , matrix
     , network-simple
     , split
@@ -81,6 +83,30 @@ executable EnclaveIFC-exe
     , vector
     , QuickCheck
     , restricted-io-ifc
+  default-language: Haskell2010
+  if (flag(enclave))
+    cpp-options: -DENCLAVE
+  else
+    cpp-options: -DUMMY
+
+executable EnclaveIFC-cleanroom-exe
+  main-is: Main.hs
+--  other-modules:
+  hs-source-dirs:
+      examples/CleanRoom
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      EnclaveIFC
+    , Paillier
+    , base >=4.7 && <5
+    , binary
+    , bytestring
+    , network-simple
+    , split
+    , random
+    , transformers
+    , restricted-io-ifc
+    , QuickCheck
   default-language: Haskell2010
   if (flag(enclave))
     cpp-options: -DENCLAVE

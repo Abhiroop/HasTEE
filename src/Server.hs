@@ -7,6 +7,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE MonoLocalBinds #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# OPTIONS_GHC -Wno-missing-methods #-}
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
@@ -24,6 +25,7 @@ import App
 import IFCIO
 import Crypto.Paillier (EntropyPool)
 import Crypto.PaillierRealNum() -- only import this for the instance of EntropyIO IO
+import System.Random
 
 import qualified Data.ByteString.Lazy as B
 
@@ -36,6 +38,12 @@ instance UnsafeFileIO Server where
 instance EntropyIO Server EntropyPool where
   genEntropyPool = Server (genEntropyPool)
 
+instance RandomIO Server where
+  type Gen Server = StdGen
+  newGen = Server initStdGen
+  splitGen g = Server (return (split g))
+  uniFromGen r g = Server (return (uniformR r g))
+
 --
 
 instance UnsafeFileIO Client where
@@ -44,6 +52,12 @@ instance UnsafeFileIO Client where
 
 instance EntropyIO Client EntropyPool where
   genEntropyPool = ClientDummy
+
+instance RandomIO Client where
+  type Gen Client = ()
+  newGen = ClientDummy
+  splitGen _ = ClientDummy
+  uniFromGen _ _ = ClientDummy
 
 -- restricted IO stuff XXX
 

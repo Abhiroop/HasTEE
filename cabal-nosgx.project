@@ -8,4 +8,4 @@ source-repository-package
 source-repository-package
     type: git
     location: https://github.com/Rewbert/restricted-io-ifc.git
-    tag: 6f412e7e581757fabd343bb12834dc84b8ecd9f8
+    tag: 8d4f195e16fced97cd9a689677f47ef43cb9ac3f
