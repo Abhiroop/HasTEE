@@ -119,6 +119,24 @@ flipCoin refst prob = do
 
 -- The algorithm
 
+countingQuery :: Server (Ref CleanRoomSt) -> (User -> Bool) -> Server Int
+countingQuery refst q = do
+    st <- readRef =<< refst
+    return $ length $ filter id $ map q (users st)
+
+laplaceDistribution :: Server (Ref CleanRoomSt) -> Double -> Server Double
+laplaceDistribution refst b = do
+    z <- int2Double <$> getRandom refst (0,1)
+    u <- ((/) 1000 . int2Double) <$> getRandom refst (1,1000)
+    return $ (2 * z - 1) * (b * log u)
+
+laplaceMechanism :: Server (Ref CleanRoomSt) -> (User -> Bool) -> Server Double
+laplaceMechanism refst q = do
+    st <- readRef =<< refst
+    true <- int2Double <$> countingQuery refst q
+    noise <- laplaceDistribution refst (1 / (epsilon st))
+    return $ true + noise
+
 -- | Randomized response algorithm
 randomizedResponse :: Server (Ref CleanRoomSt) -> (User -> Bool) -> Server Double
 randomizedResponse refst q = do
@@ -166,15 +184,15 @@ app = do
     initSt <- remote $ initEnclave ref
     prov'  <- remote $ provisionUserEnclave ref
     pkey   <- remote $ getPublicKey ref
-    rr     <- remote $ randomizedResponse ref $ salaryWithin 10000 50000
-    dataset <- liftIO $ sequence $ replicate 500 (QC.generate QC.arbitrary)
+    rr     <- remote $ laplaceMechanism ref $ fromCountry Sweden--salaryWithin 10000 50000
+    dataset <- liftIO $ sequence $ replicate 100 (QC.generate QC.arbitrary)
     runClient $ do
-        onServer $ initSt <.> 3 -- initialize enclave with privacy budget
+        onServer $ initSt <.> 0.1 -- initialize enclave with privacy budget
         key <- onServer pkey    -- fetch public key
         mapM_ (\u -> do ct <- encryptUser u key
                         onServer $ prov' <.> ct) dataset -- provision users
-        result <- onServer rr
-        liftIO $ putStrLn $ concat ["randomized response: ", show result]
+        results <- sequence $ replicate 10 $ onServer rr
+        liftIO $ putStrLn $ concat ["randomized response: ", show results]
 
 main :: IO ()
 main = do
