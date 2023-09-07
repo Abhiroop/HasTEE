@@ -39,8 +39,8 @@ instance Monad Server where
 
 data Remote a = RemoteDummy
 
-serverConstant :: a -> App (Server a)
-serverConstant = return . return
+inEnclaveConstant :: a -> App (Server a)
+inEnclaveConstant = return . return
 
 liftNewRef :: a -> App (Server (Ref a))
 liftNewRef a = App $ do

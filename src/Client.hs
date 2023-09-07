@@ -43,8 +43,8 @@ instance (Binary a) => Remotable (Server a) where
 instance (Binary a, Remotable b) => Remotable (a -> b) where
   mkRemote f = \(x:xs) -> mkRemote (f $ decode x) xs
 
-serverConstant :: a -> App (Server a)
-serverConstant _ = return ServerDummy
+inEnclaveConstant :: a -> App (Server a)
+inEnclaveConstant _ = return ServerDummy
 
 liftNewRef :: a -> App (Server (Ref a))
 liftNewRef _ = return ServerDummy

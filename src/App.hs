@@ -19,7 +19,7 @@ newRef :: a -> Server (Ref a)
 readRef    :: Ref a -> Server a
 writeRef   :: Ref a -> a -> Server ()
 -- immutable value
-serverConstant :: a -> App (Server a)
+inEnclaveConstant :: a -> App (Server a)
 -- closures
 -- create an escape hatch that can be used however many times you want
 remote :: Remotable a => a -> App (Remote a)
