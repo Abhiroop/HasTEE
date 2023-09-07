@@ -6,7 +6,11 @@ import Control.Monad.IO.Class(liftIO)
 import Text.Read ( readMaybe )
 import Data.Binary
 import GHC.Generics
+import Data.Time.Clock
 
+import System.IO
+import Control.Exception
+import System.Process
 
 import App
 
@@ -76,6 +80,36 @@ loadWallet = do
             return $ (readMaybe contents :: Maybe Wallet)
     else return Nothing
 
+
+dFx :: IO Bool
+dFx = (openFile fp ReadMode >>= hClose >> return True) `catch` \ex -> let e = ex :: SomeException
+                                                                    in return False
+  where fp = "db/wallet.seal.pf"
+
+rF :: String -> IO String
+rF fp = (do handle <- openFile fp ReadMode
+            contents <- hGetContents' handle
+            hClose handle
+            return contents)
+  where
+    hGetContents' :: Handle -> IO String
+    hGetContents' h = do
+      eof <- hIsEOF h
+      if eof
+        then
+          return []
+        else do
+          c <- hGetChar h
+          fmap (c:) $ hGetContents' h
+
+loadWallet' :: IO (Maybe Wallet)
+loadWallet' = do
+  b <- dFx
+  if b
+    then do contents <- rF "db/wallet.seal.pf"
+            return (readMaybe contents :: Maybe Wallet)
+    else return Nothing
+
 saveWallet :: Wallet -> Server ReturnCode
 saveWallet w = API.writeSecureFile wallet (show w) >> return Success
 
@@ -139,6 +173,20 @@ showItem mp title' username' = do
       let singleton = filter (\t -> title t == title' && username t == username') items
       in password (head singleton)
 
+sI :: Password -> String -> String -> IO (Either ReturnCode Password)
+sI mp title' username' = do
+  w <- loadWallet'
+  case w of
+    Nothing -> return $ Left CannotLoadWallet
+    Just w | not (itemExists title' username' (items w)) -> return $ Left ItemDoesNotExist
+    Just w | not (masterPassword w == mp) -> return $ Left WrongMasterPassword
+    Just w -> return $ Right (findPass title' username' (items w))
+  where
+    findPass :: String -> String -> [Item] -> Password
+    findPass title' username' items =
+      let singleton = filter (\t -> title t == title' && username t == username') items
+      in password (head singleton)
+
 itemExists :: String -> String -> [Item] -> Bool
 itemExists title' uname items =
   any (\t -> title t == title' && username t == uname) items
@@ -150,6 +198,15 @@ handleCommand cmd = case cmd of
   Add s str cs s' -> fmap Left $ addItem s str cs s'
   Remove s str cs -> fmap Left $ removeItem s str cs
   Show s str cs   -> showItem s str cs
+  Shutoff         -> return $ Left Success
+
+hC :: Command -> IO (Either ReturnCode String)
+hC cmd = case cmd of
+  Create s        -> fmap Left $ return PasswordOutOfRange
+  Change s str    -> fmap Left $ return PasswordOutOfRange
+  Add s str cs s' -> fmap Left $ return ItemTooLong
+  Remove s str cs -> fmap Left $ return CannotLoadWallet
+  Show s str cs   -> sI s str cs
   Shutoff         -> return $ Left Success
 
 -- * The application
@@ -199,10 +256,15 @@ instance Binary Command where
 clientApp :: Api -> Client ()
 clientApp api = do
     cmd <- getCommand
-    codeOrPass <- onServer $ execute api <.> cmd
+    runCommand shell -- decrypt
+    --codeOrPass <- onServer $ execute api <.> cmd
+    codeOrPass <- hC cmd
+    --let codeOrPass = Right "strongpassword" :: Either ReturnCode Password
     case codeOrPass of
       Left code -> liftIO $ putStrLn $ show code
       Right pass -> liftIO $ putStrLn pass
+    where
+      shell = "gpg --batch --output db/wallet.seal.pf --passphrase mypassword --decrypt db/wallet.gpg"
 
 getCommand :: Client Command
 getCommand = do
@@ -223,7 +285,16 @@ getCommand = do
         [ "-shutoff"]    -> Just Shutoff
         _                -> Nothing
 
+
+timeit :: IO Done -> IO NominalDiffTime
+timeit doit=do
+    start  <- getCurrentTime
+    doit
+    end    <- getCurrentTime
+    return (diffUTCTime end start)
+
 main :: IO ()
 main = do
-  res <- runApp app
+  res <- timeit $ runApp app
+  putStrLn $ "Time : " ++ show res
   return $ res `seq` ()

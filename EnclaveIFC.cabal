@@ -65,6 +65,8 @@ executable EnclaveIFC-exe
     , bytestring
     , network-simple
     , transformers
+    , time
+    , process
   if (flag(enclave))
     cpp-options: -DENCLAVE
   else
@@ -82,6 +84,8 @@ executable SecureWallet-exe
     , bytestring
     , network-simple
     , transformers
+    , time
+    , process
   if (flag(enclave))
     cpp-options: -DENCLAVE
   else
