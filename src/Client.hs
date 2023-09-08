@@ -78,8 +78,8 @@ tryServer (Remote identifier args) = do
     return $ fmap decode (decode resp :: Maybe ByteString)
   {- SENDING ENDS -}
 
-onServer :: Binary a => Remote (Server a) -> Client a
-onServer closure = fromJust <$> tryServer closure
+gateway :: Binary a => Remote (Server a) -> Client a
+gateway closure = fromJust <$> tryServer closure
 
 runApp :: App a -> IO a
 runApp (App s) = evalStateT s initAppState

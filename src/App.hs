@@ -41,7 +41,7 @@ tryServer :: Remote (Server a) -> Client (Maybe a)
 -- Extract a result from a server computation, with the assumption
 -- that it will not fail. Will throw an exception if the result is not
 -- returned due to some policy violation.
-onServer :: Remote (Server a) -> Client a
+gateway :: Remote (Server a) -> Client a
 (<.>) :: Binary a => Remote (a -> b) -> a -> Remote b
 
 -- call this from `main` to run the App monad

@@ -55,9 +55,9 @@ app = do
   rA <- remote $ releaseAvg remoteSec2
   gA <- remote $ getAvg remoteSec2 remoteSec1
   runClient $ do
-    data1 <- onServer (gD <.> 3)
-    _     <- onServer rA
-    avg   <- onServer gA
+    data1 <- gateway (gD <.> 3)
+    _     <- gateway rA
+    avg   <- gateway gA
     let b = dummyCompOnData data1 avg
     printCl $ "Is data less than avg? " <> show b
   where

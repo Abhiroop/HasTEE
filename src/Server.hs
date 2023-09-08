@@ -97,8 +97,8 @@ runClient _ = return Done
 tryServer :: (Binary a) => Remote (Server a) -> Client (Maybe a)
 tryServer _ = ClientDummy
 
-onServer :: Binary a => Remote (Server a) -> Client a
-onServer _ = ClientDummy
+gateway :: Binary a => Remote (Server a) -> Client a
+gateway _ = ClientDummy
 
 unsafeOnServer :: Binary a => Remote (Server a) -> Client a
 unsafeOnServer _ = ClientDummy

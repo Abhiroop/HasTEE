@@ -23,7 +23,7 @@ passwordChecker = do
   runClient $ do
     liftIO $ putStrLn "Enter your password"
     userInput <- liftIO getLine
-    res <- onServer (serverFunc <.> userInput)
+    res <- gateway (serverFunc <.> userInput)
     liftIO $ putStrLn $ "Your login attempt returned " <> (show res)
 ```
 
@@ -45,7 +45,7 @@ We need two things
 - First we need to add escape hatches or declassifiers within the Server monad. A naive type signature could be:
 
 ```
-onServer :: Remote (Server a) -> Client (Maybe a)
+gateway :: Remote (Server a) -> Client (Maybe a)
 ```
 
  The `Maybe` exists for the fact that occasionally it might be impossible to declassify data.

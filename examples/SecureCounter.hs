@@ -23,7 +23,7 @@ app = do
     writeRef r (v + 1)
     return v
   runClient $ do
-    visitors <- onServer count
+    visitors <- gateway count
     liftIO $ putStrLn $ "You are visitor number #" ++ show visitors
 
 

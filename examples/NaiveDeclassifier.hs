@@ -49,10 +49,10 @@ app = do
   rA <- remote $ releaseAvg remoteSec2
   gA <- remote $ getAvg remoteSec2 remoteSec1
   runClient $ do
-    data1 <- onServer (gD <.> 3) -- the data memory `3` can be
+    data1 <- gateway (gD <.> 3) -- the data memory `3` can be
                                  -- modified by the hacker
-    _     <- onServer rA
-    avg   <- onServer gA
+    _     <- gateway rA
+    avg   <- gateway gA
     let b = dummyCompOnData data1 avg
     printCl $ "Is data less than avg? " <> show b
   where
