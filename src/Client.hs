@@ -17,14 +17,14 @@ import App
 
 
 data Ref a = RefDummy
-data Server a = ServerDummy deriving (Functor, Applicative, Monad)
+data Enclave a = EnclaveDummy deriving (Functor, Applicative, Monad)
 data Secure a = Secure CallID [ByteString]
 
 (<@>) :: Binary a => Secure (a -> b) -> a -> Secure b
 (Secure identifier args) <@> arg =
   Secure identifier (encode arg : args)
 
-{- The Securable a constraint is necessary for the Server type -}
+{- The Securable a constraint is necessary for the Enclave type -}
 inEnclave :: (Securable a) => a -> App (Secure a)
 inEnclave _ = App $ do
   (next_id, remotes) <- get
@@ -35,28 +35,28 @@ ntimes :: (Securable a) => Int -> a -> App (Secure a)
 ntimes _ = inEnclave
 
 class Securable a where
-  mkSecure :: a -> ([ByteString] -> Server (Maybe ByteString))
+  mkSecure :: a -> ([ByteString] -> Enclave (Maybe ByteString))
 
-instance (Binary a) => Securable (Server a) where
+instance (Binary a) => Securable (Enclave a) where
   mkSecure m = \_ -> fmap (Just . encode) m
 
 instance (Binary a, Securable b) => Securable (a -> b) where
   mkSecure f = \(x:xs) -> mkSecure (f $ decode x) xs
 
-inEnclaveConstant :: a -> App (Server a)
-inEnclaveConstant _ = return ServerDummy
+inEnclaveConstant :: a -> App (Enclave a)
+inEnclaveConstant _ = return EnclaveDummy
 
-liftNewRef :: a -> App (Server (Ref a))
-liftNewRef _ = return ServerDummy
+liftNewRef :: a -> App (Enclave (Ref a))
+liftNewRef _ = return EnclaveDummy
 
-newRef :: a -> Server (Ref a)
-newRef _ = ServerDummy
+newRef :: a -> Enclave (Ref a)
+newRef _ = EnclaveDummy
 
-readRef :: Ref a -> Server a
-readRef _ = ServerDummy
+readRef :: Ref a -> Enclave a
+readRef _ = EnclaveDummy
 
-writeRef :: Ref a -> a -> Server ()
-writeRef _ _ = ServerDummy
+writeRef :: Ref a -> a -> Enclave ()
+writeRef _ _ = EnclaveDummy
 
 
 type Client = IO
@@ -67,8 +67,8 @@ runClient cl = do
   v <- liftIO cl
   return $ v `seq` Done
 
-tryServer :: (Binary a) => Secure (Server a) -> Client (Maybe a)
-tryServer (Secure identifier args) = do
+tryEnclave :: (Binary a) => Secure (Enclave a) -> Client (Maybe a)
+tryEnclave (Secure identifier args) = do
   {- SENDING REQUEST HERE -}
   connect localhost connectPort $ \(connectionSocket, remoteAddr) -> do
     -- debug logs
@@ -78,8 +78,8 @@ tryServer (Secure identifier args) = do
     return $ fmap decode (decode resp :: Maybe ByteString)
   {- SENDING ENDS -}
 
-gateway :: Binary a => Secure (Server a) -> Client a
-gateway closure = fromJust <$> tryServer closure
+gateway :: Binary a => Secure (Enclave a) -> Client a
+gateway closure = fromJust <$> tryEnclave closure
 
 runApp :: App a -> IO a
 runApp (App s) = evalStateT s initAppState

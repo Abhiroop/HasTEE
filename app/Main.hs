@@ -8,21 +8,21 @@ module Main where
 -- import Security.Sec
 
 -- #ifdef ENCLAVE
--- import Server
+-- import Enclave
 -- #else
 -- import Client
 -- #endif
 
 
 
--- getData :: Server (Ref (Sec [Int])) -> Int -> Server Int
+-- getData :: Enclave (Ref (Sec [Int])) -> Int -> Enclave Int
 -- getData serv_secret idx = do
 --   secret <- serv_secret
 --   sech <- readRef secret
 --   let sec_i = fmap (\s -> s !! idx) sech
 --   return (declassify sec_i)
 
--- releaseAvg :: Server (Ref Bool) -> Server ()
+-- releaseAvg :: Enclave (Ref Bool) -> Enclave ()
 -- releaseAvg sbool = do
 --   bool <- sbool
 --   writeRef bool True
@@ -30,7 +30,7 @@ module Main where
 -- doAvg :: [Int] -> Float
 -- doAvg xs = realToFrac (sum xs) / genericLength xs
 
--- getAvg :: Server (Ref Bool) -> Server (Ref (Sec [Int])) -> Server Float
+-- getAvg :: Enclave (Ref Bool) -> Enclave (Ref (Sec [Int])) -> Enclave Float
 -- getAvg serv_bool serv_secret = do
 --   bool   <- serv_bool
 --   secret <- serv_secret
@@ -49,8 +49,8 @@ module Main where
 
 -- app :: App Done
 -- app = do
---   remoteSec1 <- liftNewRef (sec [15,30,11,6]) :: App (Server (Ref (Sec [Int])))
---   remoteSec2 <- liftNewRef False :: App (Server (Ref Bool))
+--   remoteSec1 <- liftNewRef (sec [15,30,11,6]) :: App (Enclave (Ref (Sec [Int])))
+--   remoteSec2 <- liftNewRef False :: App (Enclave (Ref Bool))
 --   gD <- inEnclave $ getData remoteSec1
 --   rA <- inEnclave $ releaseAvg remoteSec2
 --   gA <- inEnclave $ getAvg remoteSec2 remoteSec1
@@ -69,28 +69,31 @@ module Main where
 --   res <- runApp app
 --   return $ res `seq` ()
 
+
+
+
 import Control.Monad.IO.Class(liftIO)
 
 import App
 
 #ifdef ENCLAVE
-import Server
+import Enclave
 #else
 import Client
 #endif
 
-pwdChkr :: Server String -> String -> Server Bool
+pwdChkr :: Enclave String -> String -> Enclave Bool
 pwdChkr pwd guess = fmap (== guess) pwd
 
 
 passwordChecker :: App Done
 passwordChecker = do
-  paswd <- inEnclaveConstant ("secret") :: App (Server String) -- see NOTE 1
-  serverFunc <- inEnclave $ pwdChkr paswd
+  paswd <- inEnclaveConstant ("secret") :: App (Enclave String) -- see NOTE 1
+  enclaveFunc <- inEnclave $ pwdChkr paswd
   runClient $ do
     liftIO $ putStrLn "Enter your password"
     userInput <- liftIO getLine
-    res <- gateway (serverFunc <@> userInput)
+    res <- gateway (enclaveFunc <@> userInput)
     liftIO $ putStrLn $ "Your login attempt returned " <> (show res)
 
 

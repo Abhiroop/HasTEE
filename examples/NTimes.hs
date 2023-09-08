@@ -5,7 +5,7 @@ import App
 import Control.Monad.IO.Class(liftIO)
 
 #ifdef ENCLAVE
-import Server
+import Enclave
 #else
 import Client
 #endif
@@ -13,7 +13,7 @@ import Client
 
 app :: App Done
 app = do
-  remoteRef <- liftNewRef 0 :: App (Server (Ref Int))
+  remoteRef <- liftNewRef 0 :: App (Enclave (Ref Int))
   count <- ntimes 3 $ do
     r <- remoteRef
     v <- readRef r
@@ -21,7 +21,7 @@ app = do
     return v
   runClient $ do
     sequence $ replicate 4 $ do
-      visitors <- tryServer count
+      visitors <- tryEnclave count
       liftIO $ putStrLn $ "You are visitor number #" ++ show visitors
 
 

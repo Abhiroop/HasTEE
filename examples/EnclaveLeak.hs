@@ -8,20 +8,20 @@ import App
 
 
 #ifdef ENCLAVE
-import Server
+import Enclave
 #else
 import Client
 #endif
 
 
 
-getData :: Server (Ref [Int]) -> Int -> Server Int
+getData :: Enclave (Ref [Int]) -> Int -> Enclave Int
 getData secret idx = do
   r <- secret
   s <- readRef r
   return (s !! idx)
 
-releaseAvg :: Server (Ref Bool) -> Server Bool
+releaseAvg :: Enclave (Ref Bool) -> Enclave Bool
 releaseAvg bool = do
   ref <- bool
   writeRef ref True
@@ -31,7 +31,7 @@ releaseAvg bool = do
 doAvg :: [Int] -> Float
 doAvg xs = realToFrac (sum xs) / genericLength xs
 
-getAvg :: Server (Ref Bool) -> Server (Ref [Int]) -> Server Float
+getAvg :: Enclave (Ref Bool) -> Enclave (Ref [Int]) -> Enclave Float
 getAvg bool' secret' = do
   bool <- bool'
   secret <- secret'
@@ -49,8 +49,8 @@ printCl = liftIO . putStrLn
 
 app :: App Done
 app = do
-  remoteSec1 <- liftNewRef [15,30,11,6] :: App (Server (Ref [Int]))
-  remoteSec2 <- liftNewRef False :: App (Server (Ref Bool))
+  remoteSec1 <- liftNewRef [15,30,11,6] :: App (Enclave (Ref [Int]))
+  remoteSec2 <- liftNewRef False :: App (Enclave (Ref Bool))
   gD <- inEnclave $ getData remoteSec1
   rA <- inEnclave $ releaseAvg remoteSec2
   gA <- inEnclave $ getAvg remoteSec2 remoteSec1

@@ -6,23 +6,23 @@ import Control.Monad.IO.Class(liftIO)
 import App
 
 #ifdef ENCLAVE
-import Server
+import Enclave
 #else
 import Client
 #endif
 
-pwdChkr :: Server String -> String -> Server Bool
+pwdChkr :: Enclave String -> String -> Enclave Bool
 pwdChkr pwd guess = fmap (== guess) pwd
 
 
 passwordChecker :: App Done
 passwordChecker = do
-  paswd <- serverConstant ("secret") :: App (Server String) -- see NOTE 1
-  serverFunc <- inEnclave $ pwdChkr paswd
+  paswd <- enclaveConstant ("secret") :: App (Enclave String) -- see NOTE 1
+  enclaveFunc <- inEnclave $ pwdChkr paswd
   runClient $ do
     liftIO $ putStrLn "Enter your password"
     userInput <- liftIO getLine
-    res <- gateway (serverFunc <@> userInput)
+    res <- gateway (enclaveFunc <@> userInput)
     liftIO $ putStrLn $ "Your login attempt returned " <> (show res)
 
 
@@ -34,5 +34,5 @@ main = do
 -- NOTE 1
 -- If the question is about the untrusted client accessing the actual source code
 -- it is quite possible to instead give the client
--- `liftServerIO undefined` -- see the Client.hs definition of liftServerIO
+-- `liftEnclaveIO undefined` -- see the Client.hs definition of liftEnclaveIO
 

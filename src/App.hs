@@ -11,15 +11,15 @@ import Network.Simple.TCP
 
 {-@ The EnclaveIFC API for programmers
 
--- use the below functions to describe your server API
+-- use the below functions to describe your enclave API
 
 -- mutable references
-liftNewRef :: a -> App (Server (Ref a))
-newRef :: a -> Server (Ref a)
-readRef    :: Ref a -> Server a
-writeRef   :: Ref a -> a -> Server ()
+liftNewRef :: a -> App (Enclave (Ref a))
+newRef :: a -> Enclave (Ref a)
+readRef    :: Ref a -> Enclave a
+writeRef   :: Ref a -> a -> Enclave ()
 -- immutable value
-inEnclaveConstant :: a -> App (Server a)
+inEnclaveConstant :: a -> App (Enclave a)
 -- closures
 -- create an escape hatch that can be used however many times you want
 inEnclave :: Securable a => a -> App (Secure a)
@@ -31,17 +31,17 @@ ntimes :: Securable a => Int -> a -> App (Secure a)
 runClient :: Client () -> App Done
 
 
--- use the 3 functions below to talk to the server
+-- use the 3 functions below to talk to the enclave
 -- inside the Client monad
 
--- try to extract a result from a server computation. Might fail if the
+-- try to extract a result from a enclave computation. Might fail if the
 -- declassifier does not allow the information leak
-tryServer :: Secure (Server a) -> Client (Maybe a)
+tryEnclave :: Secure (Enclave a) -> Client (Maybe a)
 
--- Extract a result from a server computation, with the assumption
+-- Extract a result from a enclave computation, with the assumption
 -- that it will not fail. Will throw an exception if the result is not
 -- returned due to some policy violation.
-gateway :: Secure (Server a) -> Client a
+gateway :: Secure (Enclave a) -> Client a
 (<@>) :: Binary a => Secure (a -> b) -> a -> Secure b
 
 -- call this from `main` to run the App monad
@@ -62,7 +62,7 @@ data Done = Done
 initAppState :: AppState
 initAppState = (0,[])
 
--- Client-server communication utils follow
+-- Client-enclave communication utils follow
 
 localhost :: String
 localhost = "127.0.0.1"

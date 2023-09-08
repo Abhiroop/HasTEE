@@ -7,26 +7,26 @@ import GHC.Float(int2Float)
 import App
 
 #ifdef ENCLAVE
-import Server
+import Enclave
 #else
 import Client
 #endif
 
 
 
-getData :: Ref (Sec [Int]) -> Int -> Server Int
+getData :: Ref (Sec [Int]) -> Int -> Enclave Int
 getData secret idx = do
   sech <- readRef secret
   let sec_i = fmap (\s -> s !! idx) sech
   return (declassify sec_i)
 
-releaseAvg :: Ref Bool -> Server ()
+releaseAvg :: Ref Bool -> Enclave ()
 releaseAvg bool = writeRef bool True
 
 doAvg :: [Int] -> Float
 doAvg xs = realToFrac (sum xs) / genericLength xs
 
-getAvg :: Ref Bool -> Ref (Sec [Int]) -> Server Float
+getAvg :: Ref Bool -> Ref (Sec [Int]) -> Enclave Float
 getAvg bool secret = do
   b <- readRef bool
   if b

@@ -33,7 +33,7 @@ library
       Client
       Security.Lattice
       Security.Sec
-      Server
+      Enclave
   other-modules:
       Paths_EnclaveIFC
   hs-source-dirs:

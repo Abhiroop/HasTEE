@@ -8,7 +8,7 @@ import Control.Monad.IO.Class(liftIO)
 import App
 
 #ifdef ENCLAVE
-import Server
+import Enclave
 #else
 import Client
 #endif
@@ -16,7 +16,7 @@ import Client
 
 app :: App Done
 app = do
-  remoteRef <- liftNewRef 0 :: App (Server (Ref Int))
+  remoteRef <- liftNewRef 0 :: App (Enclave (Ref Int))
   count <- inEnclave $ do
     r <- remoteRef
     v <- readRef r
