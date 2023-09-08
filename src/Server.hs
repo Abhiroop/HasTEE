@@ -56,8 +56,8 @@ readRef ref = Server $ readIORef ref
 writeRef :: Ref a -> a -> Server ()
 writeRef ref v = Server $ writeIORef ref v
 
-remote :: (Remotable a) => a -> App (Remote a)
-remote f = App $ do
+inEnclave :: (Remotable a) => a -> App (Remote a)
+inEnclave f = App $ do
   (next_id, remotes) <- get
   put (next_id + 1, (next_id, \bs -> let Server n = mkRemote f bs in n) : remotes)
   return RemoteDummy

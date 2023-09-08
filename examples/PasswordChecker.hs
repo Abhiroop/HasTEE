@@ -18,7 +18,7 @@ pwdChkr pwd guess = fmap (== guess) pwd
 passwordChecker :: App Done
 passwordChecker = do
   paswd <- serverConstant ("secret") :: App (Server String) -- see NOTE 1
-  serverFunc <- remote $ pwdChkr paswd
+  serverFunc <- inEnclave $ pwdChkr paswd
   runClient $ do
     liftIO $ putStrLn "Enter your password"
     userInput <- liftIO getLine

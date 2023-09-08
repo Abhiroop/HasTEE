@@ -51,9 +51,9 @@ module Main where
 -- app = do
 --   remoteSec1 <- liftNewRef (sec [15,30,11,6]) :: App (Server (Ref (Sec [Int])))
 --   remoteSec2 <- liftNewRef False :: App (Server (Ref Bool))
---   gD <- remote $ getData remoteSec1
---   rA <- remote $ releaseAvg remoteSec2
---   gA <- remote $ getAvg remoteSec2 remoteSec1
+--   gD <- inEnclave $ getData remoteSec1
+--   rA <- inEnclave $ releaseAvg remoteSec2
+--   gA <- inEnclave $ getAvg remoteSec2 remoteSec1
 --   runClient $ do
 --     data1 <- gateway (gD <@> 3)
 --     _     <- gateway rA
@@ -86,7 +86,7 @@ pwdChkr pwd guess = fmap (== guess) pwd
 passwordChecker :: App Done
 passwordChecker = do
   paswd <- inEnclaveConstant ("secret") :: App (Server String) -- see NOTE 1
-  serverFunc <- remote $ pwdChkr paswd
+  serverFunc <- inEnclave $ pwdChkr paswd
   runClient $ do
     liftIO $ putStrLn "Enter your password"
     userInput <- liftIO getLine

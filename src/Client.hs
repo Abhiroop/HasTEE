@@ -25,14 +25,14 @@ data Remote a = Remote CallID [ByteString]
   Remote identifier (encode arg : args)
 
 {- The Remotable a constraint is necessary for the Server type -}
-remote :: (Remotable a) => a -> App (Remote a)
-remote _ = App $ do
+inEnclave :: (Remotable a) => a -> App (Remote a)
+inEnclave _ = App $ do
   (next_id, remotes) <- get
   put (next_id + 1, remotes)
   return $ Remote next_id []
 
 ntimes :: (Remotable a) => Int -> a -> App (Remote a)
-ntimes _ = remote
+ntimes _ = inEnclave
 
 class Remotable a where
   mkRemote :: a -> ([ByteString] -> Server (Maybe ByteString))

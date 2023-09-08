@@ -17,7 +17,7 @@ import Client
 app :: App Done
 app = do
   remoteRef <- liftNewRef 0 :: App (Server (Ref Int))
-  count <- remote $ do
+  count <- inEnclave $ do
     r <- remoteRef
     v <- readRef r
     writeRef r (v + 1)

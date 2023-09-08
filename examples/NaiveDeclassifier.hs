@@ -45,9 +45,9 @@ app :: App Done
 app = do
   remoteSec1 <- liftNewRef (sec [15,30,11,6]) :: App (Ref (Sec [Int]))
   remoteSec2 <- liftNewRef False :: App (Ref Bool)
-  gD <- remote $ getData remoteSec1
-  rA <- remote $ releaseAvg remoteSec2
-  gA <- remote $ getAvg remoteSec2 remoteSec1
+  gD <- inEnclave $ getData remoteSec1
+  rA <- inEnclave $ releaseAvg remoteSec2
+  gA <- inEnclave $ getAvg remoteSec2 remoteSec1
   runClient $ do
     data1 <- gateway (gD <@> 3) -- the data memory `3` can be
                                  -- modified by the hacker

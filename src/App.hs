@@ -22,7 +22,7 @@ writeRef   :: Ref a -> a -> Server ()
 inEnclaveConstant :: a -> App (Server a)
 -- closures
 -- create an escape hatch that can be used however many times you want
-remote :: Remotable a => a -> App (Remote a)
+inEnclave :: Remotable a => a -> App (Remote a)
 
 -- create an escape hatch that can be used only a specific amount of times
 ntimes :: Remotable a => Int -> a -> App (Remote a)
