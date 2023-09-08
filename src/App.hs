@@ -42,7 +42,7 @@ tryServer :: Remote (Server a) -> Client (Maybe a)
 -- that it will not fail. Will throw an exception if the result is not
 -- returned due to some policy violation.
 gateway :: Remote (Server a) -> Client a
-(<.>) :: Binary a => Remote (a -> b) -> a -> Remote b
+(<@>) :: Binary a => Remote (a -> b) -> a -> Remote b
 
 -- call this from `main` to run the App monad
 runApp :: App a -> IO a

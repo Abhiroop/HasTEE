@@ -76,8 +76,8 @@ ntimes n f = App $ do
 
   return RemoteDummy
 
-(<.>) :: Binary a => Remote (a -> b) -> a -> Remote b
-(<.>) = error "Access to client not allowed"
+(<@>) :: Binary a => Remote (a -> b) -> a -> Remote b
+(<@>) = error "Access to client not allowed"
 
 
 class Remotable a where

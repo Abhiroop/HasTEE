@@ -22,7 +22,7 @@ passwordChecker = do
   runClient $ do
     liftIO $ putStrLn "Enter your password"
     userInput <- liftIO getLine
-    res <- gateway (serverFunc <.> userInput)
+    res <- gateway (serverFunc <@> userInput)
     liftIO $ putStrLn $ "Your login attempt returned " <> (show res)
 
 

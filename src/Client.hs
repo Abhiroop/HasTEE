@@ -20,8 +20,8 @@ data Ref a = RefDummy
 data Server a = ServerDummy deriving (Functor, Applicative, Monad)
 data Remote a = Remote CallID [ByteString]
 
-(<.>) :: Binary a => Remote (a -> b) -> a -> Remote b
-(Remote identifier args) <.> arg =
+(<@>) :: Binary a => Remote (a -> b) -> a -> Remote b
+(Remote identifier args) <@> arg =
   Remote identifier (encode arg : args)
 
 {- The Remotable a constraint is necessary for the Server type -}

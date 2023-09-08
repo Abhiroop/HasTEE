@@ -55,7 +55,7 @@ app = do
   rA <- remote $ releaseAvg remoteSec2
   gA <- remote $ getAvg remoteSec2 remoteSec1
   runClient $ do
-    data1 <- gateway (gD <.> 3)
+    data1 <- gateway (gD <@> 3)
     _     <- gateway rA
     avg   <- gateway gA
     let b = dummyCompOnData data1 avg
