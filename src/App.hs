@@ -22,10 +22,10 @@ writeRef   :: Ref a -> a -> Server ()
 inEnclaveConstant :: a -> App (Server a)
 -- closures
 -- create an escape hatch that can be used however many times you want
-inEnclave :: Remotable a => a -> App (Remote a)
+inEnclave :: Securable a => a -> App (Secure a)
 
 -- create an escape hatch that can be used only a specific amount of times
-ntimes :: Remotable a => Int -> a -> App (Remote a)
+ntimes :: Securable a => Int -> a -> App (Secure a)
 
 -- use the below function to introduce the Client monad
 runClient :: Client () -> App Done
@@ -36,13 +36,13 @@ runClient :: Client () -> App Done
 
 -- try to extract a result from a server computation. Might fail if the
 -- declassifier does not allow the information leak
-tryServer :: Remote (Server a) -> Client (Maybe a)
+tryServer :: Secure (Server a) -> Client (Maybe a)
 
 -- Extract a result from a server computation, with the assumption
 -- that it will not fail. Will throw an exception if the result is not
 -- returned due to some policy violation.
-gateway :: Remote (Server a) -> Client a
-(<@>) :: Binary a => Remote (a -> b) -> a -> Remote b
+gateway :: Secure (Server a) -> Client a
+(<@>) :: Binary a => Secure (a -> b) -> a -> Secure b
 
 -- call this from `main` to run the App monad
 runApp :: App a -> IO a

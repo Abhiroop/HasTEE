@@ -37,7 +37,7 @@ instance Monad Server where
     ka
 
 
-data Remote a = RemoteDummy
+data Secure a = SecureDummy
 
 inEnclaveConstant :: a -> App (Server a)
 inEnclaveConstant = return . return
@@ -56,51 +56,51 @@ readRef ref = Server $ readIORef ref
 writeRef :: Ref a -> a -> Server ()
 writeRef ref v = Server $ writeIORef ref v
 
-inEnclave :: (Remotable a) => a -> App (Remote a)
+inEnclave :: (Securable a) => a -> App (Secure a)
 inEnclave f = App $ do
   (next_id, remotes) <- get
-  put (next_id + 1, (next_id, \bs -> let Server n = mkRemote f bs in n) : remotes)
-  return RemoteDummy
+  put (next_id + 1, (next_id, \bs -> let Server n = mkSecure f bs in n) : remotes)
+  return SecureDummy
 
-ntimes :: (Remotable a) => Int -> a -> App (Remote a)
+ntimes :: (Securable a) => Int -> a -> App (Secure a)
 ntimes n f = App $ do
   r <- liftIO $ newIORef n
   (next_id, remotes) <- get
   put (next_id + 1, (next_id, \bs ->
     let Server s = do c <- Server $ do atomicModifyIORef' r $ \i -> (i - 1, i)
                       if c > 0
-                        then mkRemote f bs
+                        then mkSecure f bs
                         else return Nothing
     in s) : remotes)
 
 
-  return RemoteDummy
+  return SecureDummy
 
-(<@>) :: Binary a => Remote (a -> b) -> a -> Remote b
+(<@>) :: Binary a => Secure (a -> b) -> a -> Secure b
 (<@>) = error "Access to client not allowed"
 
 
-class Remotable a where
-  mkRemote :: a -> ([ByteString] -> Server (Maybe ByteString))
+class Securable a where
+  mkSecure :: a -> ([ByteString] -> Server (Maybe ByteString))
 
-instance (Binary a) => Remotable (Server a) where
-  mkRemote m = \_ -> fmap (Just . encode) m
+instance (Binary a) => Securable (Server a) where
+  mkSecure m = \_ -> fmap (Just . encode) m
 
-instance (Binary a, Remotable b) => Remotable (a -> b) where
-  mkRemote f = \(x:xs) -> mkRemote (f $ decode x) xs
+instance (Binary a, Securable b) => Securable (a -> b) where
+  mkSecure f = \(x:xs) -> mkSecure (f $ decode x) xs
 
 data Client a = ClientDummy deriving (Functor, Applicative, Monad, MonadIO)
 
 runClient :: Client a -> App Done
 runClient _ = return Done
 
-tryServer :: (Binary a) => Remote (Server a) -> Client (Maybe a)
+tryServer :: (Binary a) => Secure (Server a) -> Client (Maybe a)
 tryServer _ = ClientDummy
 
-gateway :: Binary a => Remote (Server a) -> Client a
+gateway :: Binary a => Secure (Server a) -> Client a
 gateway _ = ClientDummy
 
-unsafeOnServer :: Binary a => Remote (Server a) -> Client a
+unsafeOnServer :: Binary a => Secure (Server a) -> Client a
 unsafeOnServer _ = ClientDummy
 
 {-@ The server's event loop. @-}

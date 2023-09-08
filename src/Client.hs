@@ -18,30 +18,30 @@ import App
 
 data Ref a = RefDummy
 data Server a = ServerDummy deriving (Functor, Applicative, Monad)
-data Remote a = Remote CallID [ByteString]
+data Secure a = Secure CallID [ByteString]
 
-(<@>) :: Binary a => Remote (a -> b) -> a -> Remote b
-(Remote identifier args) <@> arg =
-  Remote identifier (encode arg : args)
+(<@>) :: Binary a => Secure (a -> b) -> a -> Secure b
+(Secure identifier args) <@> arg =
+  Secure identifier (encode arg : args)
 
-{- The Remotable a constraint is necessary for the Server type -}
-inEnclave :: (Remotable a) => a -> App (Remote a)
+{- The Securable a constraint is necessary for the Server type -}
+inEnclave :: (Securable a) => a -> App (Secure a)
 inEnclave _ = App $ do
   (next_id, remotes) <- get
   put (next_id + 1, remotes)
-  return $ Remote next_id []
+  return $ Secure next_id []
 
-ntimes :: (Remotable a) => Int -> a -> App (Remote a)
+ntimes :: (Securable a) => Int -> a -> App (Secure a)
 ntimes _ = inEnclave
 
-class Remotable a where
-  mkRemote :: a -> ([ByteString] -> Server (Maybe ByteString))
+class Securable a where
+  mkSecure :: a -> ([ByteString] -> Server (Maybe ByteString))
 
-instance (Binary a) => Remotable (Server a) where
-  mkRemote m = \_ -> fmap (Just . encode) m
+instance (Binary a) => Securable (Server a) where
+  mkSecure m = \_ -> fmap (Just . encode) m
 
-instance (Binary a, Remotable b) => Remotable (a -> b) where
-  mkRemote f = \(x:xs) -> mkRemote (f $ decode x) xs
+instance (Binary a, Securable b) => Securable (a -> b) where
+  mkSecure f = \(x:xs) -> mkSecure (f $ decode x) xs
 
 inEnclaveConstant :: a -> App (Server a)
 inEnclaveConstant _ = return ServerDummy
@@ -67,8 +67,8 @@ runClient cl = do
   v <- liftIO cl
   return $ v `seq` Done
 
-tryServer :: (Binary a) => Remote (Server a) -> Client (Maybe a)
-tryServer (Remote identifier args) = do
+tryServer :: (Binary a) => Secure (Server a) -> Client (Maybe a)
+tryServer (Secure identifier args) = do
   {- SENDING REQUEST HERE -}
   connect localhost connectPort $ \(connectionSocket, remoteAddr) -> do
     -- debug logs
@@ -78,7 +78,7 @@ tryServer (Remote identifier args) = do
     return $ fmap decode (decode resp :: Maybe ByteString)
   {- SENDING ENDS -}
 
-gateway :: Binary a => Remote (Server a) -> Client a
+gateway :: Binary a => Secure (Server a) -> Client a
 gateway closure = fromJust <$> tryServer closure
 
 runApp :: App a -> IO a

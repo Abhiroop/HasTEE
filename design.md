@@ -45,7 +45,7 @@ We need two things
 - First we need to add escape hatches or declassifiers within the Server monad. A naive type signature could be:
 
 ```
-gateway :: Remote (Server a) -> Client (Maybe a)
+gateway :: Secure (Server a) -> Client (Maybe a)
 ```
 
  The `Maybe` exists for the fact that occasionally it might be impossible to declassify data.
