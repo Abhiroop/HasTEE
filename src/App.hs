@@ -1,4 +1,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, StaticPointers #-}
+
+
 module App (module App) where
 
 import Control.Monad.IO.Class
@@ -8,6 +10,7 @@ import Data.ByteString.Lazy(ByteString, append, length, fromStrict)
 import Data.Binary(Binary, encode, decode)
 import Data.Maybe(fromMaybe)
 import Network.Simple.TCP
+
 
 {-@ The EnclaveIFC API for programmers
 
@@ -28,7 +31,7 @@ inEnclave :: Securable a => a -> App (Secure a)
 ntimes :: Securable a => Int -> a -> App (Secure a)
 
 -- use the below function to introduce the Client monad
-runClient :: Client () -> App Done
+runClient :: Client a -> App Done
 
 
 -- use the 3 functions below to talk to the enclave

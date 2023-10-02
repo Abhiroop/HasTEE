@@ -4,18 +4,21 @@
 {-# OPTIONS_GHC -Wno-missing-methods #-}
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
+
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE KindSignatures #-}
 module Enclave(module Enclave) where
 
-import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Trans.State.Strict
 import Data.Binary(Binary, encode, decode)
 import Data.ByteString.Lazy(ByteString)
 import Data.IORef
-import Data.Maybe
 import Network.Simple.TCP
 import System.IO(hFlush, stdout)
 import App
+
+import GHC.TypeLits
 
 import qualified Data.ByteString.Lazy as B
 
@@ -90,18 +93,25 @@ instance (Binary a) => Securable (Enclave a) where
 instance (Binary a, Securable b) => Securable (a -> b) where
   mkSecure f = \(x:xs) -> mkSecure (f $ decode x) xs
 
-data Client a = ClientDummy deriving (Functor, Applicative, Monad, MonadIO)
+-- | Term-level locations.
+type LocTm = String
 
-runClient :: Client a -> App Done
-runClient _ = return Done
+-- | Type-level locations.
+type LocTy = Symbol
 
-tryEnclave :: (Binary a) => Secure (Enclave a) -> Client (Maybe a)
+data Client (l :: LocTy) a = ClientDummy
+  deriving (Functor, Applicative, Monad, MonadIO)
+
+runClient :: LocTm -> Client l a -> App Done
+runClient _ _ = return Done
+
+tryEnclave :: (Binary a) => Secure (Enclave a) -> Client l (Maybe a)
 tryEnclave _ = ClientDummy
 
-gateway :: Binary a => Secure (Enclave a) -> Client a
+gateway :: Binary a => Secure (Enclave a) -> Client l a
 gateway _ = ClientDummy
 
-unsafeOnEnclave :: Binary a => Secure (Enclave a) -> Client a
+unsafeOnEnclave :: Binary a => Secure (Enclave a) -> Client l a
 unsafeOnEnclave _ = ClientDummy
 
 {-@ The enclave's event loop. @-}

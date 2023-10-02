@@ -1,4 +1,6 @@
 {-# LANGUAGE CPP #-}
+
+{-# LANGUAGE DataKinds #-}
 module Main where
 
 -- import Control.Monad.IO.Class(liftIO)
@@ -82,22 +84,50 @@ import Enclave
 import Client
 #endif
 
-pwdChkr :: Enclave String -> String -> Enclave Bool
-pwdChkr pwd guess = fmap (== guess) pwd
+dataTillNow :: [Int]
+dataTillNow = []
 
+computeAvg :: Enclave (Ref [Int]) -> Enclave Int
+computeAvg enc_ref_ints = do
+  ref_ints <- enc_ref_ints
+  vals     <- readRef ref_ints
+  return (avg vals)
+  where
+    avg datas
+      | (length datas) == 0 = 0
+      | otherwise = sum datas `div` (length datas)
 
-passwordChecker :: App Done
-passwordChecker = do
-  paswd <- inEnclaveConstant ("secret") :: App (Enclave String) -- see NOTE 1
-  enclaveFunc <- inEnclave $ pwdChkr paswd
-  runClient $ do
-    liftIO $ putStrLn "Enter your password"
-    userInput <- liftIO getLine
-    res <- gateway (enclaveFunc <@> userInput)
-    liftIO $ putStrLn $ "Your login attempt returned " <> (show res)
+sendData :: Enclave (Ref [Int]) -> Int -> Enclave ()
+sendData enc_ref_ints n = do
+  ref_ints <- enc_ref_ints
+  vals     <- readRef ref_ints
+  writeRef ref_ints (n : vals)
 
+data API =
+  API { sendToEnclave :: Secure (Int -> Enclave ())
+      , compAvg       :: Secure (Enclave Int)
+      }
+
+client1 :: API -> Client "client1" ()
+client1 api = do
+  gateway ((sendToEnclave api) <@> 50)
+  res <- gateway (compAvg api)
+  liftIO $ putStrLn $ "Computed result " <> (show res)
+
+client2 :: API -> Client "client2" ()
+client2 api = do
+  gateway ((sendToEnclave api) <@> 70)
+  res <- gateway (compAvg api)
+  liftIO $ putStrLn $ "Computed result " <> (show res)
+
+privateAverage :: App Done
+privateAverage = do
+  initialData <- liftNewRef dataTillNow
+  sD <- inEnclave $ sendData initialData
+  cA <- inEnclave $ computeAvg initialData
+  runClient "client2" (client2 (API sD cA))
 
 main :: IO ()
 main = do
-  res <- runApp passwordChecker
+  res <- runApp privateAverage
   return $ res `seq` ()
