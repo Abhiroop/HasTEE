@@ -18,8 +18,6 @@ import Network.Simple.TCP
 import System.IO(hFlush, stdout)
 import App
 
-import GHC.TypeLits
-
 import qualified Data.ByteString.Lazy as B
 
 type Ref a = IORef a
@@ -93,25 +91,19 @@ instance (Binary a) => Securable (Enclave a) where
 instance (Binary a, Securable b) => Securable (a -> b) where
   mkSecure f = \(x:xs) -> mkSecure (f $ decode x) xs
 
--- | Term-level locations.
-type LocTm = String
-
--- | Type-level locations.
-type LocTy = Symbol
-
-data Client (l :: LocTy) a = ClientDummy
+data Client a = ClientDummy
   deriving (Functor, Applicative, Monad, MonadIO)
 
-runClient :: LocTm -> Client l a -> App Done
-runClient _ _ = return Done
+runClient :: Client a -> App Done
+runClient _ = return Done
 
-tryEnclave :: (Binary a) => Secure (Enclave a) -> Client l (Maybe a)
+tryEnclave :: (Binary a) => Secure (Enclave a) -> Client (Maybe a)
 tryEnclave _ = ClientDummy
 
-gateway :: Binary a => Secure (Enclave a) -> Client l a
+gateway :: Binary a => Secure (Enclave a) -> Client a
 gateway _ = ClientDummy
 
-unsafeOnEnclave :: Binary a => Secure (Enclave a) -> Client l a
+unsafeOnEnclave :: Binary a => Secure (Enclave a) -> Client a
 unsafeOnEnclave _ = ClientDummy
 
 {-@ The enclave's event loop. @-}

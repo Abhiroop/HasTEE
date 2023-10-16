@@ -131,13 +131,18 @@ static bool getenv_client_inside_sgx() {
 
 // NOTE: strcmp returns 0 when strings are equal
 
-int main(int argc, char** argv) {
+int setup_ra_tls_send(char *data, size_t length, char *epidordcap) {
+
+    int final_data_length = sizeof(size_t) + length; //XXX: for now this <= 1024
+    char len_prefixed_data[final_data_length];
+
+
     int ret;
     size_t len;
     int exit_code = MBEDTLS_EXIT_FAILURE;
     mbedtls_net_context server_fd;
     uint32_t flags;
-    unsigned char buf[1024];
+    unsigned char buf[1024]; // for now fixing the size at 1024 bytes
     const char* pers = "ssl_client1";
     bool in_sgx = getenv_client_inside_sgx();
 
@@ -166,13 +171,13 @@ int main(int argc, char** argv) {
     mbedtls_x509_crt_init(&cacert);
     mbedtls_entropy_init(&entropy);
 
-    if (argc < 2 ||
-            (strcmp(argv[1], "native") && strcmp(argv[1], "epid") && strcmp(argv[1], "dcap"))) {
-        mbedtls_printf("USAGE: %s native|epid|dcap [SGX measurements]\n", argv[0]);
-        return 1;
-    }
+    /* if (argc < 2 || */
+    /*     (strcmp(argv[1], "native") && strcmp(argv[1], "epid") && strcmp(argv[1], "dcap"))) { */
+    /*     mbedtls_printf("USAGE: %s native|epid|dcap [SGX measurements]\n", argv[0]); */
+    /*     return 1; */
+    /* } */
 
-    if (!strcmp(argv[1], "epid")) {
+    if (!strcmp(epidordcap, "epid")) {
         ra_tls_verify_lib = dlopen("libra_tls_verify_epid.so", RTLD_LAZY);
         if (!ra_tls_verify_lib) {
             mbedtls_printf("%s\n", dlerror());
@@ -182,7 +187,7 @@ int main(int argc, char** argv) {
             }
             return 1;
         }
-    } else if (!strcmp(argv[1], "dcap")) {
+    } else if (!strcmp(epidordcap, "dcap")) {
         if (in_sgx) {
             /*
              * RA-TLS verification with DCAP inside SGX enclave uses dummies instead of real
@@ -228,67 +233,68 @@ int main(int argc, char** argv) {
         }
     }
 
-    if (argc > 2 && ra_tls_verify_lib) { // this branch not taken
-        if (argc != 6) {
-            mbedtls_printf("USAGE: %s %s <expected mrenclave> <expected mrsigner>"
-                           " <expected isv_prod_id> <expected isv_svn>\n"
-                           "       (first two in hex, last two as decimal; set to 0 to ignore)\n",
-                           argv[0], argv[1]);
-            return 1;
-        }
+    /* if (argc > 2 && ra_tls_verify_lib) { // this branch not taken */
+    /*     if (argc != 6) { */
+    /*         mbedtls_printf("USAGE: %s %s <expected mrenclave> <expected mrsigner>" */
+    /*                        " <expected isv_prod_id> <expected isv_svn>\n" */
+    /*                        "       (first two in hex, last two as decimal; set to 0 to ignore)\n", */
+    /*                        argv[0], argv[1]); */
+    /*         return 1; */
+    /*     } */
 
-        mbedtls_printf("[ using our own SGX-measurement verification callback"
-                       " (via command line options) ]\n");
+    /*     mbedtls_printf("[ using our own SGX-measurement verification callback" */
+    /*                    " (via command line options) ]\n"); */
 
-        g_verify_mrenclave   = true;
-        g_verify_mrsigner    = true;
-        g_verify_isv_prod_id = true;
-        g_verify_isv_svn     = true;
+    /*     g_verify_mrenclave   = true; */
+    /*     g_verify_mrsigner    = true; */
+    /*     g_verify_isv_prod_id = true; */
+    /*     g_verify_isv_svn     = true; */
 
-        (*ra_tls_set_measurement_callback_f)(my_verify_measurements);
+    /*     (*ra_tls_set_measurement_callback_f)(my_verify_measurements); */
 
-        if (!strcmp(argv[2], "0")) {
-            mbedtls_printf("  - ignoring MRENCLAVE\n");
-            g_verify_mrenclave = false;
-        } else if (parse_hex(argv[2], g_expected_mrenclave, sizeof(g_expected_mrenclave)) < 0) {
-            mbedtls_printf("Cannot parse MRENCLAVE!\n");
-            return 1;
-        }
+    /*     if (!strcmp(argv[2], "0")) { */
+    /*         mbedtls_printf("  - ignoring MRENCLAVE\n"); */
+    /*         g_verify_mrenclave = false; */
+    /*     } else if (parse_hex(argv[2], g_expected_mrenclave, sizeof(g_expected_mrenclave)) < 0) { */
+    /*         mbedtls_printf("Cannot parse MRENCLAVE!\n"); */
+    /*         return 1; */
+    /*     } */
 
-        if (!strcmp(argv[3], "0")) {
-            mbedtls_printf("  - ignoring MRSIGNER\n");
-            g_verify_mrsigner = false;
-        } else if (parse_hex(argv[3], g_expected_mrsigner, sizeof(g_expected_mrsigner)) < 0) {
-            mbedtls_printf("Cannot parse MRSIGNER!\n");
-            return 1;
-        }
+    /*     if (!strcmp(argv[3], "0")) { */
+    /*         mbedtls_printf("  - ignoring MRSIGNER\n"); */
+    /*         g_verify_mrsigner = false; */
+    /*     } else if (parse_hex(argv[3], g_expected_mrsigner, sizeof(g_expected_mrsigner)) < 0) { */
+    /*         mbedtls_printf("Cannot parse MRSIGNER!\n"); */
+    /*         return 1; */
+    /*     } */
 
-        if (!strcmp(argv[4], "0")) {
-            mbedtls_printf("  - ignoring ISV_PROD_ID\n");
-            g_verify_isv_prod_id = false;
-        } else {
-            errno = 0;
-            uint16_t isv_prod_id = (uint16_t)strtoul(argv[4], NULL, 10);
-            if (errno) {
-                mbedtls_printf("Cannot parse ISV_PROD_ID!\n");
-                return 1;
-            }
-            memcpy(g_expected_isv_prod_id, &isv_prod_id, sizeof(isv_prod_id));
-        }
+    /*     if (!strcmp(argv[4], "0")) { */
+    /*         mbedtls_printf("  - ignoring ISV_PROD_ID\n"); */
+    /*         g_verify_isv_prod_id = false; */
+    /*     } else { */
+    /*         errno = 0; */
+    /*         uint16_t isv_prod_id = (uint16_t)strtoul(argv[4], NULL, 10); */
+    /*         if (errno) { */
+    /*             mbedtls_printf("Cannot parse ISV_PROD_ID!\n"); */
+    /*             return 1; */
+    /*         } */
+    /*         memcpy(g_expected_isv_prod_id, &isv_prod_id, sizeof(isv_prod_id)); */
+    /*     } */
 
-        if (!strcmp(argv[5], "0")) {
-            mbedtls_printf("  - ignoring ISV_SVN\n");
-            g_verify_isv_svn = false;
-        } else {
-            errno = 0;
-            uint16_t isv_svn = (uint16_t)strtoul(argv[5], NULL, 10);
-            if (errno) {
-                mbedtls_printf("Cannot parse ISV_SVN\n");
-                return 1;
-            }
-            memcpy(g_expected_isv_svn, &isv_svn, sizeof(isv_svn));
-        }
-    } else if (ra_tls_verify_lib) { // this branch taken
+    /*     if (!strcmp(argv[5], "0")) { */
+    /*         mbedtls_printf("  - ignoring ISV_SVN\n"); */
+    /*         g_verify_isv_svn = false; */
+    /*     } else { */
+    /*         errno = 0; */
+    /*         uint16_t isv_svn = (uint16_t)strtoul(argv[5], NULL, 10); */
+    /*         if (errno) { */
+    /*             mbedtls_printf("Cannot parse ISV_SVN\n"); */
+    /*             return 1; */
+    /*         } */
+    /*         memcpy(g_expected_isv_svn, &isv_svn, sizeof(isv_svn)); */
+    /*     } */
+    /* } */
+    if (ra_tls_verify_lib) { // this branch taken
         mbedtls_printf("[ using default SGX-measurement verification callback"
                        " (via RA_TLS_* environment variables) ]\n");
         (*ra_tls_set_measurement_callback_f)(NULL); /* just to test RA-TLS code */
@@ -411,7 +417,12 @@ int main(int argc, char** argv) {
     mbedtls_printf("  > Write to server:");
     fflush(stdout);
 
-    len = sprintf((char*)buf, GET_REQUEST); // XXX: ABHI: This is where we send the data
+    //len = sprintf((char*)buf, GET_REQUEST); // XXX: ABHI: This is where we send the data
+    memcpy(len_prefixed_data, &length, sizeof(size_t));
+    memcpy(len_prefixed_data + sizeof(size_t), data, length);
+
+    memcpy((char*)buf, len_prefixed_data, final_data_length);
+    len = final_data_length;
 
     while ((ret = mbedtls_ssl_write(&ssl, buf, len)) <= 0) {
         if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
