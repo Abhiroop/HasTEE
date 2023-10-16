@@ -1,0 +1,142 @@
+diff --git a/app/Main.hs b/app/Main.hs
+index 86a436e..b293fe6 100644
+--- a/app/Main.hs
++++ b/app/Main.hs
+@@ -7,10 +7,14 @@ import System.IO
+ import Text.Read
+ import Data.Binary
+ import GHC.Generics
+-
++import Data.Time.Clock
+ 
+ import App
+ 
++import System.IO
++import Control.Exception
++
++
+ #ifdef ENCLAVE
+ import Server as API
+ #else
+@@ -32,7 +36,7 @@ data ReturnCode
+   | ItemTooLong
+   | FailSeal
+   | FailUnseal
+-  deriving Generic
++  deriving (Generic, Show)
+ 
+ instance Binary ReturnCode
+ 
+@@ -81,6 +85,35 @@ loadWallet = do
+             return $ (readMaybe contents :: Maybe Wallet)
+     else return Nothing
+ 
++dFx :: IO Bool
++dFx = (openFile fp ReadMode >>= hClose >> return True) `catch` \ex -> let e = ex :: SomeException
++                                                                    in return False
++  where fp = "db/wallet.seal.pf"
++
++rF :: String -> IO String
++rF fp = (do handle <- openFile fp ReadMode
++            contents <- hGetContents' handle
++            hClose handle
++            return contents)
++  where
++    hGetContents' :: Handle -> IO String
++    hGetContents' h = do
++      eof <- hIsEOF h
++      if eof
++        then
++          return []
++        else do
++          c <- hGetChar h
++          fmap (c:) $ hGetContents' h
++
++loadWallet' :: IO (Maybe Wallet)
++loadWallet' = do
++  b <- dFx
++  if b
++    then do contents <- rF "db/wallet.seal.pf"
++            return (readMaybe contents :: Maybe Wallet)
++    else return Nothing
++
+ saveWallet :: Wallet -> Server ReturnCode
+ saveWallet w = API.writeFile wallet (show w) >> return Success
+ 
+@@ -145,6 +178,20 @@ showItem mp title' username' = do
+       let singleton = filter (\t -> title t == title' && username t == username') items
+       in password (head singleton)
+ 
++sI :: Password -> String -> String -> IO (Either ReturnCode Password)
++sI mp title' username' = do
++  w <- loadWallet'
++  case w of
++    Nothing -> return $ Left CannotLoadWallet
++    Just w | not (itemExists title' username' (items w)) -> return $ Left ItemDoesNotExist
++    Just w | not (masterPassword w == mp) -> return $ Left WrongMasterPassword
++    Just w -> return $ Right (findPass title' username' (items w))
++  where
++    findPass :: String -> String -> [Item] -> Password
++    findPass title' username' items =
++      let singleton = filter (\t -> title t == title' && username t == username') items
++      in password (head singleton)
++
+ itemExists :: String -> String -> [Item] -> Bool
+ itemExists title' uname items =
+   any (\t -> title t == title' && username t == uname) items
+@@ -183,6 +230,12 @@ data Command
+ clientApp :: Api -> Client ()
+ clientApp api = do
+     cmd <- getCommand
++    codeOrPass <- hC cmd
++    case codeOrPass of
++      Left code -> liftIO $ putStrLn $ show code
++      Right pass -> liftIO $ putStrLn pass
++
++    {-
+     case cmd of
+         Shutoff -> return ()
+         Create mp -> do
+@@ -202,6 +255,7 @@ clientApp api = do
+           case p of
+             Left code -> printCode code
+             Right pass -> liftIO $ putStrLn pass
++      -}
+ 
+ getCommand :: Client Command
+ getCommand = do
+@@ -224,6 +278,15 @@ getCommand = do
+     usage :: String -> Client ()
+     usage str = liftIO $ putStrLn $ "<some helpful user manual>" ++ " : " ++ str
+ 
++hC :: Command -> IO (Either ReturnCode String)
++hC cmd = case cmd of
++  Create s        -> fmap Left $ return PasswordOutOfRange
++  Change s str    -> fmap Left $ return PasswordOutOfRange
++  Add s str cs s' -> fmap Left $ return ItemTooLong
++  Remove s str cs -> fmap Left $ return CannotLoadWallet
++  Show s str cs   -> sI s str cs
++  Shutoff         -> return $ Left Success
++
+ printCode :: ReturnCode -> Client ()
+ printCode Success             = liftIO $ putStrLn $ "# ok"
+ printCode PasswordOutOfRange  = liftIO $ putStrLn $ "= password out of range"
+@@ -238,7 +301,17 @@ printCode ItemTooLong         = liftIO $ putStrLn $ "= item is too long"
+ printCode FailSeal            = liftIO $ putStrLn $ "= failure while sealing wallet"
+ printCode FailUnseal          = liftIO $ putStrLn $ "= failure while unsealing wallet"
+ 
++
++
++timeit::IO Done -> IO NominalDiffTime
++timeit doit=do
++    start  <- getCurrentTime
++    doit
++    end    <- getCurrentTime
++    return (diffUTCTime end start)
++
+ main :: IO ()
+ main = do
+-  res <- runApp app
++  res <- timeit $ runApp app
++  putStrLn $ "Time : " ++ show res
+   return $ res `seq` ()
