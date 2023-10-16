@@ -11,7 +11,7 @@ import Foreign.C.Types
 import Foreign.Ptr
 import Foreign.Storable (peekElemOff)
 import qualified Data.ByteString as B
-
+import qualified Data.ByteString.Lazy as BL
 
 -- import Control.Monad.IO.Class(liftIO)
 -- import Data.List(genericLength)
@@ -210,14 +210,14 @@ main = do
      1 word is 8 bytes in this machine;
      Hence its encode is platform dependent
   -}
-  let inputBytes = B.toStrict $ encode baz
+  let inputBytes = BL.toStrict $ encode baz
   B.useAsCStringLen inputBytes $ \(ptr, len) -> do
     cByteStr <- processByteArray ptr (fromIntegral len)
     putStrLn "Haskell Land"
     l <- byteStrLength cByteStr
     byteString <- B.packCStringLen (cByteStr `plusPtr` 8, l) -- XXX: not portable 8 bytes for this machine
     c_free cByteStr
-    let result = decode (B.fromStrict byteString) :: [Foo]
+    let result = decode (BL.fromStrict byteString) :: [Foo]
     putStrLn $ "Hs to C and back : " <> (show result)
 
   -- B.useAsCString inputBytes $ \ptr -> do
