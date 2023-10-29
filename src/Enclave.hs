@@ -227,7 +227,7 @@ runAppRA (App s) = do
         -- clear dptr
         memsetToZero dptr dataPacketSize
         -- write result to dptr
-        _ <- B.useAsCStringLen (B.toStrict res) $ \(resptr, len) -> do
+        _ <- B.useAsCStringLen (BL.toStrict res) $ \(resptr, len) -> do
                 memcpy dptr resptr (toEnum len)
         -- set fptr = 0 and set the C server in motion
         poke fptr 0
@@ -251,7 +251,7 @@ onEventRA mapping incoming = do
       Just f = lookup identifier mapping
   result <- encode <$> f args
   putStr "onEventRA :"
-  printDecimalValues (B.toStrict result)
+  printDecimalValues (BL.toStrict result)
   let res = handleVoidTy result -- the () type cannot be sent over wire
   return (BL.append (msgSize res) res)
   where

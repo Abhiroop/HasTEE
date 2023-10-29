@@ -41,8 +41,8 @@ library
   hs-source-dirs:
       src
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
-  include-dirs: /home/abhiroop/Haskell/EnclaveIFC/cbits/mbedtls-mbedtls-3.2.1/include
-                /home/abhiroop/Haskell/EnclaveIFC/cbits/mbedtls-mbedtls-3.2.1/library
+  include-dirs: cbits/mbedtls-mbedtls-3.2.1/include
+                cbits/mbedtls-mbedtls-3.2.1/library
   build-depends:
       base >=4.7 && <5
     , binary
@@ -163,8 +163,8 @@ executable EnclaveIFC-exe
   hs-source-dirs:
       app
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
-  include-dirs: /home/abhiroop/Haskell/EnclaveIFC/cbits/mbedtls-mbedtls-3.2.1/include
-                /home/abhiroop/Haskell/EnclaveIFC/cbits/mbedtls-mbedtls-3.2.1/library
+  include-dirs: cbits/mbedtls-mbedtls-3.2.1/include
+                cbits/mbedtls-mbedtls-3.2.1/library
   build-depends:
       EnclaveIFC
     , base >=4.7 && <5
