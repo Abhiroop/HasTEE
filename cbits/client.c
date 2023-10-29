@@ -130,12 +130,6 @@ static bool getenv_client_inside_sgx() {
 }
 
 
-void printBuf(char* buf){
-  for(int i = 0; i < 40; i++){
-    printf("a[%d] - %u   ", i, buf[i]);
-  }
-  printf("\n");
-}
 
 // NOTE: strcmp returns 0 when strings are equal
 
@@ -442,9 +436,6 @@ int setup_ra_tls_send(char *data, size_t length, char *epidordcap, char* respons
     memcpy((char*)buf, len_prefixed_data, final_data_length);
     len = final_data_length;
 
-    for(int i = 0; i <final_data_length; i++){
-      printf("buf[%d] - %u\n", i, buf[i]);
-    }
 
 
     while ((ret = mbedtls_ssl_write(&ssl, buf, len)) <= 0) {
@@ -485,8 +476,6 @@ int setup_ra_tls_send(char *data, size_t length, char *epidordcap, char* respons
         mbedtls_printf(" %lu bytes read\n\n%s", len, (char*)buf);
         memcpy(response, buf, 1024);// length of both arrays static at 1024
     } while (1);
-
-    printBuf(response);
 
     mbedtls_ssl_close_notify(&ssl);
     exit_code = MBEDTLS_EXIT_SUCCESS;

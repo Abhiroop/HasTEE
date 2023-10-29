@@ -124,7 +124,7 @@ raTryEnclave (Secure identifier args) = do
       respptr  <- mallocBytes dataPacketSize :: IO (Ptr CChar)
       cByteStr <- setup_ra_tls_send ptr (fromIntegral len) cstring respptr
       let errorcode = fromEnum cByteStr :: Int
-      putStrLn $ "Hs to C and back : " <> (show errorcode)
+      -- putStrLn $ "Hs to C and back " <> (show errorcode)
       if (errorcode == 1)
       then do
         free respptr

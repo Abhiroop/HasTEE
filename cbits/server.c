@@ -368,11 +368,6 @@ reset:
     // ABHI: Data is received and is now in buf
 
     memcpy(data, buf, len);// Copying the data so that Haskell can read it
-    printf("\n\n Before Haskell intervention \n\n");
-
-    for(int i = 0; i <len; i++){
-      printf("data[%d] - %u\n", i, data[i]);
-    }
 
     *flag = 1;
     // Haskell Thread operational now
@@ -392,15 +387,9 @@ reset:
 
     memcpy(buf, data, len); // buf will be written back to client
 
-    printf("\n\n After Haskell intervention \n\n");
-
 
     mbedtls_printf("  > Write to client:");
     fflush(stdout);
-
-    for(int i = 0; i < len; i++){
-      printf("buf[%d] - %u\n", i, buf[i]);
-    }
 
     //len = sprintf((char*)buf, HTTP_RESPONSE, mbedtls_ssl_get_ciphersuite(&ssl)); //XXX: Abhi: writing the HTTP response here
 

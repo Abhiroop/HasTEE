@@ -259,8 +259,6 @@ onEventRA mapping incoming = do
   let (identifier, args) = decode incoming :: (CallID, [ByteString])
       Just f = lookup identifier mapping
   result <- encode <$> f args
-  putStr "onEventRA :"
-  printDecimalValues (BL.toStrict result)
   let res = handleVoidTy result -- the () type cannot be sent over wire
   return (BL.append (msgSize res) res)
   where
