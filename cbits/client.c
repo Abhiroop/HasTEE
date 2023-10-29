@@ -426,7 +426,14 @@ int setup_ra_tls_send(char *data, size_t length, char *epidordcap, char* respons
 
     //len = sprintf((char*)buf, GET_REQUEST); // XXX: ABHI: This is where we send the data
     // invariant- sizeof(len_prefixed_data) = sizeof(size_t) + sizeof(data) or length
-    memcpy(len_prefixed_data, &length, sizeof(size_t));
+    //memcpy(len_prefixed_data, &length, sizeof(size_t));
+    size_t data_len = length;
+    for (int i = 7; i >= 0; i--) {
+      len_prefixed_data[i] = (char)(data_len & 0xFF);
+      data_len >>= sizeof(size_t);
+    }
+
+
     memcpy(len_prefixed_data + sizeof(size_t), data, length);
 
 

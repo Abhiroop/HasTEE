@@ -99,7 +99,7 @@ foreign import ccall "setup_ra_tls_send" setup_ra_tls_send
 
 -- XXX: not portable;
 -- 8 bytes for this machine
--- LSB/MSB order for this machine
+-- big-endian order used for the data packets
 byteStrLength :: Ptr CChar -> IO Int
 byteStrLength cptr = go 0 []
   where

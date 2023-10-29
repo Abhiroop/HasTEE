@@ -174,12 +174,12 @@ foreign import ccall "startServer" startServer
 
 -- XXX: not portable;
 -- 8 bytes for this machine
--- LSB/MSB order for this machine
+-- big-endian order used for the data packets
 byteStrLength :: Ptr CChar -> IO Int
 byteStrLength cptr = go 0 []
   where
     go 8 xs = do
-      let (i0:i1:i2:i3:i4:i5:i6:i7:_) = xs
+      let (i0:i1:i2:i3:i4:i5:i6:i7:_) = reverse xs
       let y = (shift i0 56) .|. (shift i1 48) .|. (shift i2 40) .|.
               (shift i3 32) .|. (shift i4 24) .|. (shift i5 16) .|.
               (shift i6  8) .|. i7
