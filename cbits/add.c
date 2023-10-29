@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <unistd.h>
 int add(int a, int b){
   int res = a + b;
   printf("C : %d\n", res);
@@ -35,4 +36,12 @@ char *processByteArrayDyn(char* data) {
     printf("data[%d] = %02X \n", i, data[i]);
   }
   return(data);
+}
+
+void test_ref(int *value, char *data) {
+  printf("C land : %d\n", *value);
+  sleep(5);
+  char *str = "hello\0";
+  memcpy(data, str, 5);
+  *value = 1;
 }

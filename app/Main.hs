@@ -13,6 +13,10 @@ import Foreign.Storable (peekElemOff)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 
+import Control.Concurrent (forkIO, threadDelay, yield)
+import Data.IORef
+import Foreign.Marshal.Alloc
+import Foreign.Storable
 -- import Control.Monad.IO.Class(liftIO)
 -- import Data.List(genericLength)
 -- import GHC.Float(int2Float)
@@ -107,14 +111,21 @@ computeAvg enc_ref_ints = do
       | (length datas) == 0 = 0
       | otherwise = sum datas `div` (length datas)
 
-sendData :: Enclave (Ref [Int]) -> Int -> Enclave ()
+-- sendData :: Enclave (Ref [Int]) -> Int -> Enclave ()
+-- sendData enc_ref_ints n = do
+--   ref_ints <- enc_ref_ints
+--   vals     <- readRef ref_ints
+--   writeRef ref_ints (n : vals)
+
+sendData :: Enclave (Ref [Int]) -> Int -> Enclave Int
 sendData enc_ref_ints n = do
   ref_ints <- enc_ref_ints
   vals     <- readRef ref_ints
   writeRef ref_ints (n : vals)
+  return (n * 2)
 
 data API =
-  API { sendToEnclave :: Secure (Int -> Enclave ())
+  API { sendToEnclave :: Secure (Int -> Enclave Int)
       , compAvg       :: Secure (Enclave Int)
       }
 
@@ -124,8 +135,8 @@ data API =
 
 client1 :: API -> Client ()
 client1 api = do
-  gateway ((sendToEnclave api) <@> 50)
-  res <- gateway (compAvg api)
+  res <- gatewayRA ((sendToEnclave api) <@> 3)
+  -- res <- gatewayRA (compAvg api)
   liftIO $ putStrLn $ "Computed result " <> (show res)
 
 
@@ -138,18 +149,19 @@ privateAverage = do
 
 main :: IO ()
 main = do
-  res <- runApp privateAverage
+  res <- runAppRA privateAverage
   return $ res `seq` ()
 
 
-foreign import ccall "exp" c_exp :: Double -> Double
-foreign import ccall "add" c_add :: CInt -> CInt -> IO CInt
-foreign import ccall "processByteArray" processByteArray
-    :: Ptr CChar -> CSize -> IO (Ptr CChar)
-foreign import ccall "processByteArrayDyn" processByteArrayDyn
-    :: Ptr CChar -> IO (Ptr CChar)
-foreign import ccall "stdlib.h free" c_free :: Ptr CChar -> IO ()
 
+-- foreign import ccall "add" c_add :: CInt -> CInt -> IO CInt
+-- foreign import ccall "processByteArray" processByteArray
+--     :: Ptr CChar -> CSize -> IO (Ptr CChar)
+-- foreign import ccall "processByteArrayDyn" processByteArrayDyn
+--     :: Ptr CChar -> IO (Ptr CChar)
+-- foreign import ccall "stdlib.h free" c_free :: Ptr CChar -> IO ()
+-- foreign import ccall "test_ref" test_ref
+--     :: Ptr CInt -> Ptr CChar -> IO ()
 
 -- -- XXX: not portable;
 -- -- 8 bytes for this machine
@@ -194,33 +206,64 @@ foreign import ccall "stdlib.h free" c_free :: Ptr CChar -> IO ()
 -- baz :: [Foo]
 -- baz = [foo, bar]
 
+-- microsec :: Int -> Int
+-- microsec = id
+
+-- millisec :: Int -> Int
+-- millisec x = (microsec x) * 1000
+
+-- sec :: Int -> Int
+-- sec x = (millisec x) * 1000
+
 -- main :: IO ()
 -- main = do
---   putStrLn $ show $ c_exp 2
 --   res <- c_add 5 3
 --   putStrLn $ "Haskell : " <> show res
---   -- let inputBytes = B.pack [1, 2, 3, 4, 11]
---   {- Binary's encode is interesting
---      It uses 1 word to store the length of the data about to come
---      1 word is 8 bytes in this machine;
---      Hence its encode is platform dependent
---   -}
---   let inputBytes = BL.toStrict $ encode baz
---   B.useAsCStringLen inputBytes $ \(ptr, len) -> do
---     cByteStr <- processByteArray ptr (fromIntegral len)
---     putStrLn "Haskell Land"
---     l <- byteStrLength cByteStr
---     byteString <- B.packCStringLen (cByteStr `plusPtr` 8, l) -- XXX: not portable 8 bytes for this machine
---     c_free cByteStr
---     let result = decode (BL.fromStrict byteString) :: [Foo]
---     putStrLn $ "Hs to C and back : " <> (show result)
+--   intptr  <- malloc :: IO (Ptr CInt)
+--   dataptr <- mallocBytes 1024 :: IO (Ptr CChar)
+--   poke intptr 0
+--   _ <- forkIO $ test_ref intptr dataptr
+--   loop intptr dataptr
+--   -- putStrLn $ "Haskell Land flag : " <> (show $ fromEnum int_val)
+--   where
+--     loop :: Ptr CInt -> Ptr CChar -> IO ()
+--     loop iptr dptr = do
+--       int_val <- peek iptr
+--       if (fromEnum int_val == 0)
+--       then do
+--         -- yield
+--         threadDelay (millisec 200)
+--         loop iptr dptr
+--       else do
+--         cchar <- peekElemOff dptr 0
+--         putStrLn $ "Haskell Land data : " <> (show cchar)
+--         free iptr
+--         free dptr
 
---   -- B.useAsCString inputBytes $ \ptr -> do
---   --   cByteStr   <- processByteArrayDyn ptr
---   --   putStrLn "Haskell Land"
---   --   byteString <- B.packCStringLen (cByteStr, 19)
---   --   let result = decode (B.fromStrict byteString) :: [Foo]
---   --   putStrLn $ "Hs to C and back : " <> (show result)
+  -- let inputBytes = B.pack [1, 2, 3, 4, 11]
+  {- Binary's encode is interesting
+     It uses 1 word to store the length of the data about to come
+     1 word is 8 bytes in this machine;
+     Hence its encode is platform dependent
+  -}
+  -- let inputBytes = BL.toStrict $ encode baz
+  -- B.useAsCStringLen inputBytes $ \(ptr, len) -> do
+  --   cByteStr <- processByteArray ptr (fromIntegral len)
+  --   putStrLn "Haskell Land"
+  --   l <- byteStrLength cByteStr
+  --   byteString <- B.packCStringLen (cByteStr `plusPtr` 8, l) -- XXX: not portable 8 bytes for this machine
+  --   c_free cByteStr
+  --   let result = decode (BL.fromStrict byteString) :: [Foo]
+  --   putStrLn $ "Hs to C and back : " <> (show result)
+
+
+
+  -- B.useAsCString inputBytes $ \ptr -> do
+  --   cByteStr   <- processByteArrayDyn ptr
+  --   putStrLn "Haskell Land"
+  --   byteString <- B.packCStringLen (cByteStr, 19)
+  --   let result = decode (B.fromStrict byteString) :: [Foo]
+  --   putStrLn $ "Hs to C and back : " <> (show result)
 
 {- LINEAR HASKELL primer
 

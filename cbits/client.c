@@ -129,13 +129,20 @@ static bool getenv_client_inside_sgx() {
     return !strcmp(str, "1") || !strcmp(str, "true") || !strcmp(str, "TRUE");
 }
 
+
+void printBuf(char* buf){
+  for(int i = 0; i < 40; i++){
+    printf("a[%d] - %u   ", i, buf[i]);
+  }
+  printf("\n");
+}
+
 // NOTE: strcmp returns 0 when strings are equal
 
-int setup_ra_tls_send(char *data, size_t length, char *epidordcap) {
+int setup_ra_tls_send(char *data, size_t length, char *epidordcap, char* response) {
 
     int final_data_length = sizeof(size_t) + length; //XXX: for now this <= 1024
     char len_prefixed_data[final_data_length];
-
 
     int ret;
     size_t len;
@@ -418,11 +425,20 @@ int setup_ra_tls_send(char *data, size_t length, char *epidordcap) {
     fflush(stdout);
 
     //len = sprintf((char*)buf, GET_REQUEST); // XXX: ABHI: This is where we send the data
+    // invariant- sizeof(len_prefixed_data) = sizeof(size_t) + sizeof(data) or length
     memcpy(len_prefixed_data, &length, sizeof(size_t));
     memcpy(len_prefixed_data + sizeof(size_t), data, length);
 
+
+    /* if(final_data_length > sizeof(buf)) // bound check */
+    /*   return 1; */
     memcpy((char*)buf, len_prefixed_data, final_data_length);
     len = final_data_length;
+
+    for(int i = 0; i <final_data_length; i++){
+      printf("buf[%d] - %u\n", i, buf[i]);
+    }
+
 
     while ((ret = mbedtls_ssl_write(&ssl, buf, len)) <= 0) {
         if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
@@ -460,7 +476,10 @@ int setup_ra_tls_send(char *data, size_t length, char *epidordcap) {
 
         len = ret;
         mbedtls_printf(" %lu bytes read\n\n%s", len, (char*)buf);
+        memcpy(response, buf, 1024);// length of both arrays static at 1024
     } while (1);
+
+    printBuf(response);
 
     mbedtls_ssl_close_notify(&ssl);
     exit_code = MBEDTLS_EXIT_SUCCESS;

@@ -19,6 +19,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #define mbedtls_fprintf fprintf
 #define mbedtls_printf printf
@@ -74,7 +75,7 @@ static ssize_t file_read(const char* path, char* buf, size_t count) {
     return bytes;
 }
 
-char* startServer() {
+int startServer(int *flag, char *data) {
     int ret;
     size_t len;
     mbedtls_net_context listen_fd;
@@ -363,12 +364,45 @@ reset:
             break;
     } while (1);
 
-    // ABHI: Write 200 Response
+
+    // ABHI: Data is received and is now in buf
+
+    memcpy(data, buf, len);// Copying the data so that Haskell can read it
+    printf("\n\n Before Haskell intervention \n\n");
+
+    for(int i = 0; i <len; i++){
+      printf("data[%d] - %u\n", i, data[i]);
+    }
+
+    *flag = 1;
+    // Haskell Thread operational now
+    unsigned int milliseconds = 200; // 200 milliseconds
+
+    while(*flag == 1){
+      usleep(milliseconds * 1000);
+    }
+
+
+    //Haskell has reset data
+    size_t size = 0;
+    for (int i = 0; i < sizeof(size_t); i++) {
+      size = (size << 8) | (uint8_t)data[i];
+    }
+    len = sizeof(size_t) + size;
+
+    memcpy(buf, data, len); // buf will be written back to client
+
+    printf("\n\n After Haskell intervention \n\n");
+
 
     mbedtls_printf("  > Write to client:");
     fflush(stdout);
 
-    len = sprintf((char*)buf, HTTP_RESPONSE, mbedtls_ssl_get_ciphersuite(&ssl)); //XXX: Abhi: writing the HTTP response here
+    for(int i = 0; i < len; i++){
+      printf("buf[%d] - %u\n", i, buf[i]);
+    }
+
+    //len = sprintf((char*)buf, HTTP_RESPONSE, mbedtls_ssl_get_ciphersuite(&ssl)); //XXX: Abhi: writing the HTTP response here
 
     while ((ret = mbedtls_ssl_write(&ssl, buf, len)) <= 0) {
         if (ret == MBEDTLS_ERR_NET_CONN_RESET) {
