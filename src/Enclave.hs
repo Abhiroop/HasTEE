@@ -172,6 +172,13 @@ sec x = (millisec x) * 1000
 foreign import ccall "startServer" startServer
     :: Ptr CInt -> Ptr CChar -> IO CInt
 
+foreign import ccall "unistd.h usleep"
+  c_usleep :: CUInt -> IO CInt
+
+sleepMilliseconds :: Int -> IO ()
+sleepMilliseconds ms =
+  c_usleep (fromIntegral (ms * 1000)) >> return () -- Convert milliseconds to microseconds
+
 -- XXX: not portable;
 -- 8 bytes for this machine
 -- big-endian order used for the data packets
@@ -213,7 +220,11 @@ runAppRA (App s) = do
       int_val <- peek fptr
       if (fromEnum int_val == 0)
       then do
-        threadDelay (millisec 200)
+        -- threadDelay (millisec 200)
+        -- sleepMilliseconds will force the whole thread to sleep
+        -- instead of context switching (like threadDelay); it is
+        -- a greasy hack to counter for the lack of timing APIs in Intel SGX
+        sleepMilliseconds 200
         loop vTable fptr dptr
       else do
         -- find size of data to be read
@@ -222,8 +233,6 @@ runAppRA (App s) = do
         byteString <- B.packCStringLen (dptr `plusPtr` 8, l)
         -- call the correct function from the lookup table
         res <- onEventRA vTable (BL.fromStrict byteString)
-        -- putStr "ByteString res :"
-        -- printDecimalValues (B.toStrict res)
         -- clear dptr
         memsetToZero dptr dataPacketSize
         -- write result to dptr
