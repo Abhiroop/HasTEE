@@ -111,32 +111,24 @@ computeAvg enc_ref_ints = do
       | (length datas) == 0 = 0
       | otherwise = sum datas `div` (length datas)
 
--- sendData :: Enclave (Ref [Int]) -> Int -> Enclave ()
--- sendData enc_ref_ints n = do
---   ref_ints <- enc_ref_ints
---   vals     <- readRef ref_ints
---   writeRef ref_ints (n : vals)
-
-sendData :: Enclave (Ref [Int]) -> Int -> Enclave Int
+sendData :: Enclave (Ref [Int]) -> Int -> Enclave ()
 sendData enc_ref_ints n = do
   ref_ints <- enc_ref_ints
   vals     <- readRef ref_ints
   writeRef ref_ints (n : vals)
-  return (n * 2)
+
 
 data API =
-  API { sendToEnclave :: Secure (Int -> Enclave Int)
+  API { sendToEnclave :: Secure (Int -> Enclave ())
       , compAvg       :: Secure (Enclave Int)
       }
 
 
 
-
-
 client1 :: API -> Client ()
 client1 api = do
-  res <- gatewayRA ((sendToEnclave api) <@> 3)
-  -- res <- gatewayRA (compAvg api)
+  gatewayRA ((sendToEnclave api) <@> 1700)
+  res <- gatewayRA (compAvg api)
   liftIO $ putStrLn $ "Computed result " <> (show res)
 
 
