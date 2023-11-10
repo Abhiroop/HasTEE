@@ -11,6 +11,7 @@ import Data.Binary(Binary, encode, decode)
 import Data.Maybe(fromMaybe)
 import Network.Simple.TCP
 
+import Data.Dynamic
 
 {-@ The EnclaveIFC API for programmers
 
@@ -97,3 +98,34 @@ readTCPSocket socket = do
   return $ fromStrict $ fromMaybe err msgBody
   where
     err = error "Error parsing request"
+
+
+-- Introducing labels
+
+class (Eq l, Show l, Read l, Typeable l) => Label l where
+  lub       :: l -> l -> l
+  glb       :: l -> l -> l
+  canFlowTo :: l -> l -> Bool
+
+infixl 5 `lub`, `glb`
+infix 4 `canFlowTo`
+
+data HierarchicalLabels = H -- high
+                        | L -- low
+                        deriving (Eq, Show, Read)
+
+instance Label HierarchicalLabels where
+  canFlowTo L H = True
+  canFlowTo L L = True
+  canFlowTo H H = True
+  canFlowTo H L = False
+
+  lub H L = H
+  lub L H = H
+  lub L L = L
+  lub H H = H
+
+  glb H L = L
+  glb L H = L
+  glb H H = H
+  glb L L = L

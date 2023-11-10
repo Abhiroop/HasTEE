@@ -98,50 +98,73 @@ import Enclave
 import Client
 #endif
 
-dataTillNow :: [Int]
-dataTillNow = []
+-- dataTillNow :: [Int]
+-- dataTillNow = []
 
-computeAvg :: Enclave (Ref [Int]) -> Enclave Int
-computeAvg enc_ref_ints = do
-  ref_ints <- enc_ref_ints
-  vals     <- readRef ref_ints
-  return (avg vals)
-  where
-    avg datas
-      | (length datas) == 0 = 0
-      | otherwise = sum datas `div` (length datas)
+-- computeAvg :: Enclave (Ref [Int]) -> Enclave Int
+-- computeAvg enc_ref_ints = do
+--   ref_ints <- enc_ref_ints
+--   vals     <- readRef ref_ints
+--   return (avg vals)
+--   where
+--     avg datas
+--       | (length datas) == 0 = 0
+--       | otherwise = sum datas `div` (length datas)
 
-sendData :: Enclave (Ref [Int]) -> Int -> Enclave ()
-sendData enc_ref_ints n = do
-  ref_ints <- enc_ref_ints
-  vals     <- readRef ref_ints
-  writeRef ref_ints (n : vals)
-
-
-data API =
-  API { sendToEnclave :: Secure (Int -> Enclave ())
-      , compAvg       :: Secure (Enclave Int)
-      }
+-- sendData :: Enclave (Ref [Int]) -> Int -> Enclave ()
+-- sendData enc_ref_ints n = do
+--   ref_ints <- enc_ref_ints
+--   vals     <- readRef ref_ints
+--   writeRef ref_ints (n : vals)
 
 
-
-client1 :: API -> Client ()
-client1 api = do
-  gatewayRA ((sendToEnclave api) <@> 1700)
-  res <- gatewayRA (compAvg api)
-  liftIO $ putStrLn $ "Computed result " <> (show res)
+-- data API =
+--   API { sendToEnclave :: Secure (Int -> Enclave ())
+--       , compAvg       :: Secure (Enclave Int)
+--       }
 
 
-privateAverage :: App Done
-privateAverage = do
-  initialData <- liftNewRef dataTillNow
-  sD <- inEnclave $ sendData initialData
-  cA <- inEnclave $ computeAvg initialData
-  runClient (client1 (API sD cA))
+
+-- client1 :: API -> Client ()
+-- client1 api = do
+--   gatewayRA ((sendToEnclave api) <@> 1700)
+--   res <- gatewayRA (compAvg api)
+--   liftIO $ putStrLn $ "Computed result " <> (show res)
+
+
+-- privateAverage :: App Done
+-- privateAverage = do
+--   initialData <- liftNewRef dataTillNow
+--   sD <- inEnclave $ sendData initialData
+--   cA <- inEnclave $ computeAvg initialData
+--   runClient (client1 (API sD cA))
+
+
+type EnclaveHL a = Enclave HierarchicalLabels a
+type LabeledHL a = Labeled HierarchicalLabels a
+
+pwdChecker :: EnclaveHL (LabeledHL String) -> String -> EnclaveHL Bool
+pwdChecker pwd guess = do
+  l_pwd <- pwd
+  p     <- unlabel l_pwd
+  if p == guess
+  then return True
+  else return False
+
+ifctest :: App Done
+ifctest = do
+  pwd   <- inEnclaveLabeledConstant H "password"
+  efunc <- inEnclave $ pwdChecker pwd
+  runClient $ do
+    liftIO $ putStrLn "Enter your password:"
+    userInput <- liftIO getLine
+    res <- gatewayRA (efunc <@> userInput)
+    liftIO $ putStrLn ("Login returned " ++ show res)
+
 
 main :: IO ()
 main = do
-  res <- runAppRA privateAverage
+  res <- runAppRA ifctest
   return $ res `seq` ()
 
 

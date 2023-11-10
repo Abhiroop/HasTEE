@@ -25,8 +25,8 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 
 
-data Ref a = RefDummy
-data Enclave a = EnclaveDummy deriving (Functor, Applicative, Monad)
+data Ref l a = RefDummy
+data Enclave l a = EnclaveDummy deriving (Functor, Applicative, Monad)
 data Secure a = Secure CallID [ByteString]
 
 (<@>) :: Binary a => Secure (a -> b) -> a -> Secure b
@@ -44,28 +44,56 @@ ntimes :: (Securable a) => Int -> a -> App (Secure a)
 ntimes _ = inEnclave
 
 class Securable a where
-  mkSecure :: a -> ([ByteString] -> Enclave (Maybe ByteString))
+  mkSecure :: a -> ([ByteString] -> Enclave l (Maybe ByteString))
 
-instance (Binary a) => Securable (Enclave a) where
-  mkSecure m = \_ -> fmap (Just . encode) m
+-- instance (Binary a) => Securable (Enclave a) where
+--   mkSecure m = \_ -> fmap (Just . encode) m
+
+instance (Binary a) => Securable (Enclave l a) where
+  mkSecure _ = \_ -> EnclaveDummy
 
 instance (Binary a, Securable b) => Securable (a -> b) where
   mkSecure f = \(x:xs) -> mkSecure (f $ decode x) xs
 
-inEnclaveConstant :: a -> App (Enclave a)
-inEnclaveConstant _ = return EnclaveDummy
+inEnclaveConstant :: (Label l) => l -> a -> App (Enclave l (Labeled l a))
+inEnclaveConstant _ _ = return EnclaveDummy
 
-liftNewRef :: a -> App (Enclave (Ref a))
-liftNewRef _ = return EnclaveDummy
 
-newRef :: a -> Enclave (Ref a)
-newRef _ = EnclaveDummy
+liftNewRef :: Label l
+           => l -> a -> App (Enclave l (Ref l a))
+liftNewRef _ _ = return EnclaveDummy
 
-readRef :: Ref a -> Enclave a
+
+newRef :: Label l
+       => l
+       -> a
+       -> Enclave l (Ref l a)
+newRef _ _ = EnclaveDummy
+
+
+readRef :: Label l => Ref l a -> Enclave l a
 readRef _ = EnclaveDummy
 
-writeRef :: Ref a -> a -> Enclave ()
+
+writeRef :: Label l => Ref l a -> a -> Enclave l ()
 writeRef _ _ = EnclaveDummy
+
+data Labeled l t = LabeledDummy
+
+taint :: Label l => l -> Enclave l ()
+taint _ = EnclaveDummy
+
+label :: Label l => l -> a -> Enclave l (Labeled l a)
+label _ _ = EnclaveDummy
+
+unlabel :: Label l => Labeled l a -> Enclave l a
+unlabel _ = EnclaveDummy
+
+toLabeled :: Label l => l -> Enclave l a -> Enclave l (Labeled l a)
+toLabeled _ _ = EnclaveDummy
+
+inEnclaveLabeledConstant :: Label l => l -> a -> App (Enclave l (Labeled l a))
+inEnclaveLabeledConstant _ _ = return $ EnclaveDummy
 
 
 
@@ -77,7 +105,7 @@ runClient cl = do
   v <- liftIO cl
   return $ v `seq` Done
 
-tryEnclave :: Binary a => Secure (Enclave a) -> Client (Maybe a)
+tryEnclave :: Binary a => Secure (Enclave l a) -> Client (Maybe a)
 tryEnclave (Secure identifier args) = do
   {- SENDING REQUEST HERE -}
   connect localhost connectPort $ \(connectionSocket, remoteAddr) -> do
@@ -88,7 +116,7 @@ tryEnclave (Secure identifier args) = do
     return $ fmap decode (decode resp :: Maybe ByteString)
   {- SENDING ENDS -}
 
-gateway :: Binary a => Secure (Enclave a) -> Client a
+gateway :: Binary a => Secure (Enclave l a) -> Client a
 gateway closure = fromJust <$> tryEnclave closure
 
 runApp :: App a -> IO a
@@ -116,7 +144,7 @@ byteStrLength cptr = go 0 []
 dataPacketSize :: Int
 dataPacketSize = 1024
 
-raTryEnclave :: Binary a => Secure (Enclave a) -> Client (Maybe a)
+raTryEnclave :: (Label l, Binary a) => Secure (Enclave l a) -> Client (Maybe a)
 raTryEnclave (Secure identifier args) = do
   let inputBytes = BL.toStrict $ encode $ (identifier, reverse args)
   withCString "native" $ \cstring -> do
@@ -137,7 +165,7 @@ raTryEnclave (Secure identifier args) = do
         return $ fmap decode (decode $ BL.fromStrict byteString :: Maybe ByteString)
 
 --return $ fmap decode $ Just $ encode errorcode
-gatewayRA :: Binary a => Secure (Enclave a) -> Client a
+gatewayRA :: (Binary a, Label l) => Secure (Enclave l a) -> Client a
 gatewayRA closure = (fromMaybe raerr) <$> (raTryEnclave closure)
   where
     raerr = error "ERR: Remote Attestation failed"

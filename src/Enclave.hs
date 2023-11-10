@@ -32,74 +32,283 @@ import Foreign.Ptr
 import Foreign.Storable
 import GHC.IO.Handle.Text
 
+import Control.Monad (ap, unless)
+import Data.Dynamic
 
-type Ref a = IORef a
-newtype Enclave a = Enclave (IO a)
 
-instance Functor (Enclave) where
-  fmap f (Enclave x) = Enclave $ fmap f x
+{- FLOATING LABEL Information Flow Control
+   The floating is bounded by a clearance label. Bell
+   and La Padula formalized clearance as a bound on
+   the current label of a particular users’ processes.
+-}
 
-instance Applicative Enclave where
-  pure x = Enclave (pure x)
-  Enclave f <*> Enclave a = Enclave $ f <*> a
 
-instance Monad Enclave where
+-- | Internal state of an 'LIO' computation.
+data LIOState l = LIOState { lioLabel     :: !l -- ^ Current label.
+                           , lioClearance :: !l -- ^ Current clearance.
+                           } deriving (Eq, Show, Read)
+
+
+initLIOState :: LIOState l
+initLIOState = undefined
+
+-- | Encriching the Enclave monad with labeled values
+newtype Enclave l a = Enclave (IORef (LIOState l) -> IO a) deriving (Typeable)
+
+instance Monad (Enclave l) where
   return = pure
-  Enclave ma >>= k = Enclave $ do
-    a <- ma
-    let Enclave ka = k a
-    ka
+  (Enclave ma) >>= k = Enclave $ \s -> do
+    a <- ma s
+    case k a of
+      Enclave mb -> mb s
 
+
+instance Functor (Enclave l) where
+  fmap f (Enclave ma) = Enclave $ \s -> fmap f (ma s)
+
+
+instance Applicative (Enclave l) where
+  pure a = Enclave $ \_ -> pure a
+  (<*>) = ap
+
+
+getLIOStateTCB :: Enclave l (LIOState l)
+getLIOStateTCB = Enclave readIORef
+
+-- | Set internal state.
+putLIOStateTCB :: LIOState l -> Enclave l ()
+putLIOStateTCB s = Enclave $ \sp -> writeIORef sp $! s
+
+-- | Update the internal state given some function.
+modifyLIOStateTCB :: (LIOState l -> LIOState l) -> Enclave l ()
+modifyLIOStateTCB f = do
+  s <- getLIOStateTCB
+  putLIOStateTCB (f s)
 
 data Secure a = SecureDummy
 
-inEnclaveConstant :: a -> App (Enclave a)
-inEnclaveConstant = return . return
+data Labeled l t = LabeledTCB !l t deriving Typeable
 
-liftNewRef :: a -> App (Enclave (Ref a))
-liftNewRef a = App $ do
-  r <- liftIO $ newIORef a
-  return (return r)
+inEnclaveConstant :: (Label l) => l -> a -> App (Enclave l (Labeled l a))
+inEnclaveConstant l constant = return (label l constant)
 
-newRef :: a -> Enclave (Ref a)
-newRef x = Enclave $ newIORef x
+-- ignoring exceptions for now
+runLIO :: Enclave l a -> LIOState l -> IO (a, LIOState l)
+runLIO (Enclave m) s0 = do
+  sp <- newIORef s0
+  a  <- m sp
+  s1 <- readIORef sp
+  return (a, s1)
 
-readRef :: Ref a -> Enclave a
-readRef ref = Enclave $ readIORef ref
+evalLIO :: Enclave l a -> LIOState l -> IO a
+evalLIO lio s = do
+  (a, _) <- runLIO lio s
+  return a
 
-writeRef :: Ref a -> a -> Enclave ()
-writeRef ref v = Enclave $ writeIORef ref v
+guardAlloc :: Label l => l -> Enclave l ()
+guardAlloc newl = do
+  LIOState { lioLabel = l_cur, lioClearance = c_cur } <- getLIOStateTCB
+  unless ((l_cur `canFlowTo` newl) && (newl `canFlowTo` c_cur)) $
+    error ("Can't flow to " <> (show newl) <>
+           " or below clearance level " <> (show c_cur))
+
+{-| taint l
+Taints the current context with l such that L_cur = (L_cur ⊔ l),
+provided (L_cur ⊔ l) ⊑ C_cur
+-}
+taint :: Label l => l -> Enclave l ()
+taint newl = do
+  LIOState { lioLabel = l_cur, lioClearance = c_cur } <- getLIOStateTCB
+  let l' = l_cur `lub` newl
+  unless (l' `canFlowTo` c_cur) $
+    error ((show l') <> " can't flow to " <> (show c_cur))
+  modifyLIOStateTCB $ \s -> s { lioLabel = l' }
+
+{-| label l a
+Given a label l such that L_cur ⊑ l ⊑ C_cur and a value v, the
+action label l v returns a labeled value that protects v with l
+-}
+label :: Label l => l -> a -> Enclave l (Labeled l a)
+label l a = do
+  guardAlloc l
+  return $ LabeledTCB l a
+
+{-| unlabel lv
+raises the current label, clearance permitting (see `taint`) to the join of
+of lv’s label and the current label, returning the value with the label removed.
+-}
+unlabel :: Label l => Labeled l a -> Enclave l a
+unlabel (LabeledTCB l v) = do
+  taint l
+  return v
+
+{-|
+If lv is a labeled value with label l and value v, labelOf lv returns l
+-}
+labelOf :: Label l => Labeled l a -> l
+labelOf (LabeledTCB l _) = l
+
+{-|
+Given a label l such that L_cur ⊑ l ⊑ C_cur and an LIO action m,
+toLabeled l m executes m without raising L_cur.
+-}
+toLabeled :: Label l => l -> Enclave l a -> Enclave l (Labeled l a)
+toLabeled l m = do
+  -- | get the label and clearance before running the computation
+  LIOState { lioLabel = l_cur, lioClearance = c_cur } <- getLIOStateTCB
+  -- | run the computation now (label will float up)
+  res <- m
+  -- | grab the current label
+  LIOState { lioLabel = l_cur_new} <- getLIOStateTCB
+  -- | check IFC violation
+  unless (l_cur_new `canFlowTo` l) $
+    error ("Label " <> (show l) <> " leads to IFC violation")
+  -- | restore original label and clearance
+  putLIOStateTCB (LIOState { lioLabel = l_cur, lioClearance = c_cur })
+  -- | wrap result in the desired label
+  lRes <- label l res
+  -- | wrap the `lRes` in the (l_cur, c_cur)'s context
+  return lRes
+
+inEnclaveLabeledConstant :: Label l => l -> a -> App (Enclave l (Labeled l a))
+inEnclaveLabeledConstant l a = return $ do
+  guardAlloc l
+  return $ LabeledTCB l a
+
+data Ref l a = LIORef !l (IORef a)
+
+newRef :: Label l
+       => l                   -- ^ Label of reference
+       -> a                   -- ^ Initial value
+       -> Enclave l (Ref l a) -- ^ Mutable reference
+newRef l a = do
+  guardAlloc l
+  Enclave $ \_ -> (LIORef l `fmap` newIORef a)
+
+
+liftNewRef :: Label l
+           => l -> a -> App (Enclave l (Ref l a))
+liftNewRef l a = return $ newRef l a
+
+
+readRef :: Label l => Ref l a -> Enclave l a
+readRef (LIORef l ref) = do
+  taint l
+  Enclave (\_ -> readIORef ref)
+
+
+writeRef :: Label l => Ref l a -> a -> Enclave l ()
+writeRef (LIORef l ref) v = do
+  guardAlloc l
+  Enclave (\_ -> writeIORef ref v)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+------ Previous Non-LIO---------
+
+-- type Ref a = IORef a
+-- newtype Enclave a = Enclave (IO a)
+
+-- instance Functor (Enclave) where
+--   fmap f (Enclave x) = Enclave $ fmap f x
+
+-- instance Applicative Enclave where
+--   pure x = Enclave (pure x)
+--   Enclave f <*> Enclave a = Enclave $ f <*> a
+
+-- instance Monad Enclave where
+--   return = pure
+--   Enclave ma >>= k = Enclave $ do
+--     a <- ma
+--     let Enclave ka = k a
+--     ka
+
+
+-- data Secure a = SecureDummy
+
+-- inEnclaveConstant :: a -> App (Enclave a)
+-- inEnclaveConstant = return . return
+
+-- liftNewRef :: a -> App (Enclave (Ref a))
+-- liftNewRef a = App $ do
+--   r <- liftIO $ newIORef a
+--   return (return r)
+
+-- newRef :: a -> Enclave (Ref a)
+-- newRef x = Enclave $ newIORef x
+
+-- readRef :: Ref a -> Enclave a
+-- readRef ref = Enclave $ readIORef ref
+
+-- writeRef :: Ref a -> a -> Enclave ()
+-- writeRef ref v = Enclave $ writeIORef ref v
+
 
 inEnclave :: (Securable a) => a -> App (Secure a)
 inEnclave f = App $ do
   (next_id, remotes) <- get
-  put (next_id + 1, (next_id, \bs -> let Enclave n = mkSecure f bs in n) : remotes)
+  put (next_id + 1, (next_id, \bs -> do
+                        let enc_l_maybe_bytestr = mkSecure f bs
+                        evalLIO enc_l_maybe_bytestr initLIOState) : remotes)
   return SecureDummy
 
-ntimes :: (Securable a) => Int -> a -> App (Secure a)
-ntimes n f = App $ do
-  r <- liftIO $ newIORef n
-  (next_id, remotes) <- get
-  put (next_id + 1, (next_id, \bs ->
-    let Enclave s = do
-          c <- Enclave $ do atomicModifyIORef' r $ \i -> (i - 1, i)
-          if c > 0
-          then mkSecure f bs
-          else return Nothing
-    in s) : remotes)
+-- inEnclave :: (Securable a) => a -> App (Secure a)
+-- inEnclave f = App $ do
+--   (next_id, remotes) <- get
+--   put (next_id + 1, (next_id, \bs -> let Enclave n = mkSecure f bs in n) : remotes)
+--   return SecureDummy
 
 
-  return SecureDummy
+{-
+
+
+
+
+
+
+-}
+
+-- ntimes :: (Securable a) => Int -> a -> App (Secure a)
+-- ntimes n f = App $ do
+--   r <- liftIO $ newIORef n
+--   (next_id, remotes) <- get
+--   put (next_id + 1, (next_id, \bs ->
+--     let Enclave s = do
+--           c <- Enclave $ do atomicModifyIORef' r $ \i -> (i - 1, i)
+--           if c > 0
+--           then mkSecure f bs
+--           else return Nothing
+--     in s) : remotes)
+
+
+--   return SecureDummy
 
 (<@>) :: Binary a => Secure (a -> b) -> a -> Secure b
 (<@>) = error "Access to client not allowed"
 
 
 class Securable a where
-  mkSecure :: a -> ([ByteString] -> Enclave (Maybe ByteString))
+  mkSecure :: a -> ([ByteString] -> Enclave l (Maybe ByteString))
 
-instance (Binary a) => Securable (Enclave a) where
-  mkSecure m = \_ -> fmap (Just . encode) m
+-- instance (Binary a) => Securable (Enclave l a) where
+--   mkSecure m = \_ -> fmap (Just . encode) m
+
+instance (Binary a) => Securable (Enclave l a) where
+  mkSecure m = \_ -> Enclave $ \_ -> (fmap (Just . encode) (evalLIO m initLIOState))
 
 instance (Binary a, Securable b) => Securable (a -> b) where
   mkSecure f = \(x:xs) -> mkSecure (f $ decode x) xs
@@ -110,13 +319,13 @@ data Client a = ClientDummy
 runClient :: Client a -> App Done
 runClient _ = return Done
 
-tryEnclave :: (Binary a) => Secure (Enclave a) -> Client (Maybe a)
+tryEnclave :: (Binary a) => Secure (Enclave l a) -> Client (Maybe a)
 tryEnclave _ = ClientDummy
 
-gateway :: Binary a => Secure (Enclave a) -> Client a
+gateway :: Binary a => Secure (Enclave l a) -> Client a
 gateway _ = ClientDummy
 
-unsafeOnEnclave :: Binary a => Secure (Enclave a) -> Client a
+unsafeOnEnclave :: Binary a => Secure (Enclave l a) -> Client a
 unsafeOnEnclave _ = ClientDummy
 
 {-@ The enclave's event loop. @-}
@@ -251,7 +460,7 @@ ffiComp tid fptr dptr = do
   then throwTo tid (userError "C server terminated abnormally")
   else throwTo tid (userError "C server terminated gracefully") -- should not happen
 
-gatewayRA :: Binary a => Secure (Enclave a) -> Client a
+gatewayRA :: Binary a => Secure (Enclave l a) -> Client a
 gatewayRA _ = ClientDummy
 
 onEventRA :: [(CallID, Method)] -> ByteString -> IO (BL.ByteString)
