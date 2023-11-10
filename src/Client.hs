@@ -92,9 +92,12 @@ unlabel _ = EnclaveDummy
 toLabeled :: Label l => l -> Enclave l a -> Enclave l (Labeled l a)
 toLabeled _ _ = EnclaveDummy
 
+
+labelOf :: Label l => Labeled l a -> l
+labelOf _ = error "Client not allowed to look at labels"
+
 inEnclaveLabeledConstant :: Label l => l -> a -> App (Enclave l (Labeled l a))
 inEnclaveLabeledConstant _ _ = return $ EnclaveDummy
-
 
 
 
