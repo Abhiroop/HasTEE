@@ -112,7 +112,7 @@ infix 4 `canFlowTo`
 
 data HierarchicalLabels = H -- high
                         | L -- low
-                        deriving (Eq, Show, Read)
+                        deriving (Eq, Show, Read, Typeable)
 
 instance Label HierarchicalLabels where
   canFlowTo L H = True
