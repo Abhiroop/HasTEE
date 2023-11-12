@@ -34,26 +34,27 @@ data Secure a = Secure CallID [ByteString]
   Secure identifier (encode arg : args)
 
 {- The Securable a constraint is necessary for the Enclave type -}
-inEnclave :: (Securable a) => a -> App (Secure a)
-inEnclave _ = App $ do
+inEnclave :: (Securable a, Label l) => LIOState l -> a -> App (Secure a)
+inEnclave _ _ = App $ do
   (next_id, remotes) <- get
   put (next_id + 1, remotes)
   return $ Secure next_id []
 
-ntimes :: (Securable a) => Int -> a -> App (Secure a)
-ntimes _ = inEnclave
+-- ntimes :: (Securable a) => Int -> a -> App (Secure a)
+-- ntimes _ = inEnclave
 
 class Securable a where
-  mkSecure :: a -> ([ByteString] -> Enclave l (Maybe ByteString))
+  mkSecure :: (Label l)
+           => LIOState l -> a -> ([ByteString] -> Enclave l (Maybe ByteString))
 
 -- instance (Binary a) => Securable (Enclave a) where
 --   mkSecure m = \_ -> fmap (Just . encode) m
 
-instance (Binary a) => Securable (Enclave l a) where
-  mkSecure _ = \_ -> EnclaveDummy
+instance (Binary a, Label l) => Securable (Enclave l a) where
+  mkSecure _ _ = \_ -> EnclaveDummy
 
 instance (Binary a, Securable b) => Securable (a -> b) where
-  mkSecure f = \(x:xs) -> mkSecure (f $ decode x) xs
+  mkSecure _ _  = \_ -> EnclaveDummy
 
 inEnclaveConstant :: (Label l) => l -> a -> App (Enclave l (Labeled l a))
 inEnclaveConstant _ _ = return EnclaveDummy

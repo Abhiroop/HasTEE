@@ -34,6 +34,7 @@ import GHC.IO.Handle.Text
 
 import Control.Monad (ap, unless)
 import Data.Dynamic
+import Data.Maybe (fromMaybe)
 
 
 {- FLOATING LABEL Information Flow Control
@@ -42,15 +43,6 @@ import Data.Dynamic
    the current label of a particular users’ processes.
 -}
 
-
--- | Internal state of an 'LIO' computation.
-data LIOState l = LIOState { lioLabel     :: !l -- ^ Current label.
-                           , lioClearance :: !l -- ^ Current clearance.
-                           } deriving (Eq, Show, Read)
-
-
-initLIOState :: LIOState l
-initLIOState = undefined
 
 -- | Encriching the Enclave monad with labeled values
 newtype Enclave l a = Enclave (IORef (LIOState l) -> IO a) deriving (Typeable)
@@ -100,10 +92,14 @@ runLIO (Enclave m) s0 = do
   s1 <- readIORef sp
   return (a, s1)
 
-evalLIO :: Enclave l a -> LIOState l -> IO a
-evalLIO lio s = do
+evalLIO :: (Typeable l) => Enclave l a -> Dynamic -> IO a
+evalLIO lio s_dyn = do
+  let s = fromMaybe dynError
+             (fromDynamic s_dyn :: (Typeable l) => Maybe (LIOState l))
   (a, _) <- runLIO lio s
   return a
+  where
+    dynError = error "Incorrect label type supplied to evalLIO"
 
 guardAlloc :: Label l => l -> Enclave l ()
 guardAlloc newl = do
@@ -258,12 +254,10 @@ writeRef (LIORef l ref) v = do
 -- writeRef ref v = Enclave $ writeIORef ref v
 
 
-inEnclave :: (Securable a) => a -> App (Secure a)
-inEnclave f = App $ do
+inEnclave :: (Securable a, Label l) => LIOState l -> a -> App (Secure a)
+inEnclave initState f = App $ do
   (next_id, remotes) <- get
-  put (next_id + 1, (next_id, \bs -> do
-                        let enc_l_maybe_bytestr = mkSecure f bs
-                        evalLIO enc_l_maybe_bytestr initLIOState) : remotes)
+  put (next_id + 1, (next_id, \bs -> mkSecure initState f bs) : remotes)
   return SecureDummy
 
 -- inEnclave :: (Securable a) => a -> App (Secure a)
@@ -302,16 +296,20 @@ inEnclave f = App $ do
 
 
 class Securable a where
-  mkSecure :: a -> ([ByteString] -> Enclave l (Maybe ByteString))
+  mkSecure :: (Label l)
+           => LIOState l -> a -> ([ByteString] -> IO (Maybe ByteString))
 
+instance (Binary a, Label l) => Securable (Enclave l a) where
+  mkSecure s m = \_ -> fmap (Just . encode) (evalLIO m (toDyn s))
+
+
+-- m :: Enclave l1 a
 -- instance (Binary a) => Securable (Enclave l a) where
---   mkSecure m = \_ -> fmap (Just . encode) m
-
-instance (Binary a) => Securable (Enclave l a) where
-  mkSecure m = \_ -> Enclave $ \_ -> (fmap (Just . encode) (evalLIO m initLIOState))
+--   mkSecure :: LIOState l1 -> Enclave l a -> [ByteString] -> IO (Maybe ByteString)
+--   mkSecure s m = \_ -> (fmap (Just . encode) (evalLIO m s))
 
 instance (Binary a, Securable b) => Securable (a -> b) where
-  mkSecure f = \(x:xs) -> mkSecure (f $ decode x) xs
+  mkSecure s f = \(x:xs) -> mkSecure s (f $ decode x) xs
 
 data Client a = ClientDummy
   deriving (Functor, Applicative, Monad, MonadIO)

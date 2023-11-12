@@ -129,3 +129,8 @@ instance Label HierarchicalLabels where
   glb L H = L
   glb H H = H
   glb L L = L
+
+-- | Internal state of an 'LIO' computation.
+data LIOState l = LIOState { lioLabel     :: !l -- ^ Current label.
+                           , lioClearance :: !l -- ^ Current clearance.
+                           } deriving (Eq, Show, Read, Typeable)

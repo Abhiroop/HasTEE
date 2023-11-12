@@ -3,20 +3,20 @@
 {-# LANGUAGE DataKinds #-}
 module Main where
 
-import Data.Binary
-import Data.Bits (shift, (.|.))
-import Data.Word (Word8)
-import Foreign.C
-import Foreign.C.Types
-import Foreign.Ptr
-import Foreign.Storable (peekElemOff)
-import qualified Data.ByteString as B
-import qualified Data.ByteString.Lazy as BL
+-- import Data.Binary
+-- import Data.Bits (shift, (.|.))
+-- import Data.Word (Word8)
+-- import Foreign.C
+-- import Foreign.C.Types
+-- import Foreign.Ptr
+-- import Foreign.Storable (peekElemOff)
+-- import qualified Data.ByteString as B
+-- import qualified Data.ByteString.Lazy as BL
 
-import Control.Concurrent (forkIO, threadDelay, yield)
-import Data.IORef
-import Foreign.Marshal.Alloc
-import Foreign.Storable
+-- import Control.Concurrent (forkIO, threadDelay, yield)
+-- import Data.IORef
+-- import Foreign.Marshal.Alloc
+-- import Foreign.Storable
 -- import Control.Monad.IO.Class(liftIO)
 -- import Data.List(genericLength)
 -- import GHC.Float(int2Float)
@@ -151,16 +151,18 @@ pwdChecker pwd guess = do
   then return True
   else return False
 
+baseConfig :: LIOState HierarchicalLabels
+baseConfig = LIOState { lioLabel = L, lioClearance = H}
+
 ifctest :: App Done
 ifctest = do
   pwd   <- inEnclaveLabeledConstant H "password"
-  efunc <- inEnclave $ pwdChecker pwd
+  efunc <- inEnclave baseConfig $ pwdChecker pwd
   runClient $ do
     liftIO $ putStrLn "Enter your password:"
     userInput <- liftIO getLine
     res <- gatewayRA (efunc <@> userInput)
     liftIO $ putStrLn ("Login returned " ++ show res)
-
 
 main :: IO ()
 main = do
