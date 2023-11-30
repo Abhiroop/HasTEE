@@ -36,6 +36,7 @@ library
       Security.Lattice
       Security.Sec
       Enclave
+      DCLabel
   other-modules:
       Paths_EnclaveIFC
   hs-source-dirs:
@@ -47,6 +48,7 @@ library
       base >=4.7 && <5
     , binary
     , bytestring
+    , containers
     , network-simple
     , transformers
   default-language: Haskell2010
@@ -170,6 +172,7 @@ executable EnclaveIFC-exe
     , base >=4.7 && <5
     , binary
     , bytestring
+    , containers
     , network-simple
     , transformers
   default-language: Haskell2010
