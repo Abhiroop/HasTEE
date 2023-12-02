@@ -15,6 +15,7 @@ import Data.ByteString.Lazy(ByteString)
 import Data.Binary(Binary, encode, decode)
 import Network.Simple.TCP
 import App
+import DCLabel
 
 
 import Foreign.C
@@ -80,6 +81,15 @@ writeRef :: Label l => Ref l a -> a -> Enclave l ()
 writeRef _ _ = EnclaveDummy
 
 data Labeled l t = LabeledDummy
+
+
+-- | The main monad type alias to use for 'LIO' computations that are
+-- specific to 'DCLabel's.
+type EnclaveDC = Enclave DCLabel
+
+-- | An alias for 'Labeled' values labeled with a 'DCLabel'.
+type DCLabeled = Labeled DCLabel
+
 
 taint :: Label l => l -> Enclave l ()
 taint _ = EnclaveDummy

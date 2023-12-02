@@ -91,7 +91,7 @@ module Main where
 import Control.Monad.IO.Class(liftIO)
 
 import App
-
+import DCLabel
 #ifdef ENCLAVE
 import Enclave
 #else
@@ -140,10 +140,7 @@ import Client
 --   runClient (client1 (API sD cA))
 
 
-type EnclaveHL a = Enclave HierarchicalLabels a
-type LabeledHL a = Labeled HierarchicalLabels a
-
-pwdChecker :: EnclaveHL (LabeledHL String) -> String -> EnclaveHL Bool
+pwdChecker :: EnclaveDC (DCLabeled String) -> String -> EnclaveDC Bool
 pwdChecker pwd guess = do
   l_pwd <- pwd
   p     <- unlabel l_pwd
@@ -151,13 +148,10 @@ pwdChecker pwd guess = do
   then return True
   else return False
 
-baseConfig :: LIOState HierarchicalLabels
-baseConfig = LIOState { lioLabel = L, lioClearance = H}
-
 ifctest :: App Done
 ifctest = do
-  pwd   <- inEnclaveLabeledConstant H "password"
-  efunc <- inEnclave baseConfig $ pwdChecker pwd
+  pwd   <- inEnclaveLabeledConstant (False %% True) "password"
+  efunc <- inEnclave dcDefaultState $ pwdChecker pwd
   runClient $ do
     liftIO $ putStrLn "Enter your password:"
     userInput <- liftIO getLine

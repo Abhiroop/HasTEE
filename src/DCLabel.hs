@@ -3,7 +3,6 @@
 module DCLabel (module DCLabel) where
 
 import App
-import Enclave
 import Data.Dynamic
 import Data.Typeable
 import Data.Set (Set)
@@ -18,13 +17,20 @@ principal = Principal
 
 -- Disjunctive clauses
 newtype Disjunction = Disjunction { dToSet :: Set Principal }
-  deriving (Ord, Show, Eq, Typeable, Read)
+  deriving (Ord, Eq, Typeable, Read)
 
 instance Semigroup Disjunction where
   (<>) = dUnion
 
 instance Monoid Disjunction where
   mempty = dFalse
+
+instance Show Disjunction where
+  showsPrec _ (Disjunction ps)
+    | S.size ps == 0 = ("False" ++)
+    | S.size ps == 1 = shows $ S.findMin ps
+    | otherwise = showParen True $
+        foldr1 (\l r -> l . (" \\/ " ++) . r) $ map shows $ S.toList ps
 
 dFalse :: Disjunction
 dFalse = Disjunction S.empty
@@ -57,13 +63,20 @@ dImplies (Disjunction ps1) (Disjunction ps2)
 
 -- Conjunctive Normal Form (CNF) Formulas
 newtype CNF = CNF { cToSet :: Set Disjunction }
-  deriving (Ord, Show, Eq, Typeable, Read)
+  deriving (Ord, Eq, Typeable, Read)
 
 instance Semigroup CNF where
   (<>) = cUnion
 
 instance Monoid CNF where
   mempty = cTrue
+
+instance Show CNF where
+  showsPrec d (CNF ds)
+    | S.size ds == 0 = ("True" ++)
+    | S.size ds == 1 = shows $ S.findMin ds
+    | otherwise = showParen (d > 7) $
+        foldr1 (\l r -> l . (" /\\ " ++) . r) $ map shows $ S.toList ds
 
 -- | A 'CNF' that is always @True@--i.e., trivially satisfiable.  When
 -- @'dcSecrecy' = cTrue@, it means data is public.  When
@@ -242,14 +255,6 @@ instance SpeaksFor CNF where
 dcDefaultState :: LIOState DCLabel
 dcDefaultState = LIOState { lioLabel = dcPublic
                           , lioClearance = False %% True }
-
--- | The main monad type alias to use for 'LIO' computations that are
--- specific to 'DCLabel's.
-type EnclaveDC = Enclave DCLabel
-
--- | An alias for 'Labeled' values labeled with a 'DCLabel'.
-type DCLabeled = Labeled DCLabel
-
 
 ------------------------------ Privileges----------------------------
 

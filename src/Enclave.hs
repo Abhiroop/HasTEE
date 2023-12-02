@@ -17,6 +17,7 @@ import Data.IORef
 import Network.Simple.TCP
 import System.IO(hFlush, stdout)
 import App
+import DCLabel
 
 import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy as BL
@@ -199,17 +200,12 @@ writeRef (LIORef l ref) v = do
   Enclave (\_ -> writeIORef ref v)
 
 
+-- | The main monad type alias to use for 'LIO' computations that are
+-- specific to 'DCLabel's.
+type EnclaveDC = Enclave DCLabel
 
-
-
-
-
-
-
-
-
-
-
+-- | An alias for 'Labeled' values labeled with a 'DCLabel'.
+type DCLabeled = Labeled DCLabel
 
 
 
