@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE ScopedTypeVariables, RankNTypes, TypeApplications #-}
@@ -55,16 +56,6 @@ instance Monad Enclave where
 
 data Secure a = SecureDummy
 
-traceSysCall :: String -> [String] -> IO ()
-traceSysCall syscall args = do
-  ctimestamp <- getTimeStamp
-  let logstr = "@" <> show ctimestamp <> "     "  <>
-               syscall <> formatArgs
-  withFile logFile AppendMode $ \hdl -> do
-    hPutStrLn hdl logstr
-  where
-    formatArgs =
-      "(" <> intercalate ", " args <> ")"
 
 instance FileIO Enclave where
   unTrustedReadFile fp = Enclave $ do
@@ -106,40 +97,67 @@ getTimeStamp = do
   free currentTimePtr
   return currentTime
 
-traceCall :: CallID -> Enclave ()
-traceCall callid = Enclave $ do
+traceSysCall :: String -> [String] -> IO ()
+traceSysCall syscall args = do
   ctimestamp <- getTimeStamp
-  let logstr = "@" <> show ctimestamp <> "     call(" <> show callid <> ")"
+  let logstr = "@" <> show ctimestamp <> "     "  <>
+               syscall <> formatArgs
   withFile logFile AppendMode $ \hdl -> do
     hPutStrLn hdl logstr
+  where
+    formatArgs =
+      "(" <> intercalate ", " args <> ")"
+
 
 inEnclave :: (Securable a) => a -> App (Secure a)
 inEnclave f = App $ do
   (next_id, remotes) <- get
   put (next_id + 1, (next_id, \bs ->
-                        let Enclave n = (traceCall next_id) >>
-                                        mkSecure f bs in n) : remotes)
+                        let Enclave n =
+#ifdef MONTRACE
+                              let log_str = show next_id <> "("
+                               in mkSecure log_str f bs
+#else
+                              mkSecure f bs
+#endif
+                        in n) : remotes)
   return SecureDummy
 
-ntimes :: (Securable a) => Int -> a -> App (Secure a)
-ntimes n f = App $ do
-  r <- liftIO $ newIORef n
-  (next_id, remotes) <- get
-  put (next_id + 1, (next_id, \bs ->
-    let Enclave s = do
-          c <- Enclave $ do atomicModifyIORef' r $ \i -> (i - 1, i)
-          if c > 0
-          then mkSecure f bs
-          else return Nothing
-    in s) : remotes)
-
-
-  return SecureDummy
 
 (<@>) :: Binary a => Secure (a -> b) -> a -> Secure b
 (<@>) = error "Access to client not allowed"
 
 
+#ifdef MONTRACE
+
+type TraceString = String
+
+class Securable a where
+  mkSecure :: TraceString -> a -> ([ByteString] -> Enclave (Maybe ByteString))
+
+instance (Binary a, Show a) => Securable (Enclave a) where
+  mkSecure tracestr m = \_ -> do
+    traceCall (tracestr <> ")") -- close opening "("
+    a <- m
+    -- return trace
+    traceCall $ "output(" <> (show a) <> ")"
+    pure (Just (encode a))
+
+instance (Binary a, Show a, Securable b) => Securable (a -> b) where
+  mkSecure tracestr f = \(x:xs) ->
+    let arg = decode x
+     in case xs of
+          [] -> mkSecure (tracestr <> show arg) (f arg) xs
+          _  -> mkSecure (tracestr <> show arg <> ",") (f arg) xs
+
+traceCall :: TraceString -> Enclave ()
+traceCall tracestr = Enclave $ do
+  ctimestamp <- getTimeStamp
+  let logstr = "@" <> show ctimestamp <> "     " <> tracestr
+  withFile logFile AppendMode $ \hdl -> do
+    hPutStrLn hdl logstr
+
+#else
 class Securable a where
   mkSecure :: a -> ([ByteString] -> Enclave (Maybe ByteString))
 
@@ -148,6 +166,8 @@ instance (Binary a) => Securable (Enclave a) where
 
 instance (Binary a, Securable b) => Securable (a -> b) where
   mkSecure f = \(x:xs) -> mkSecure (f $ decode x) xs
+
+#endif
 
 data Client a = ClientDummy
   deriving (Functor, Applicative, Monad, MonadIO)

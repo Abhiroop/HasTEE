@@ -27,6 +27,10 @@ flag enclave
   manual: True
   default: False
 
+flag monitor-trace
+  manual: True
+  default: False
+
 library
   c-sources: cbits/client.c
              cbits/server.c
@@ -54,6 +58,11 @@ library
     cpp-options: -DENCLAVE
   else
     cpp-options: -DUMMY
+  if (flag(monitor-trace))
+    cpp-options: -DMONTRACE
+  else
+    cpp-options: -DUMMY
+
 
 executable EnclaveIFC-exe
   main-is: Main.hs
@@ -175,6 +184,10 @@ executable EnclaveIFC-exe
   default-language: Haskell2010
   if (flag(enclave))
     cpp-options: -DENCLAVE
+  else
+    cpp-options: -DUMMY
+  if (flag(monitor-trace))
+    cpp-options: -DMONTRACE
   else
     cpp-options: -DUMMY
 

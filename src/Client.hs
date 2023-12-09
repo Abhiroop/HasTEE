@@ -45,9 +45,6 @@ inEnclave _ = App $ do
   put (next_id + 1, remotes)
   return $ Secure next_id []
 
-ntimes :: (Securable a) => Int -> a -> App (Secure a)
-ntimes _ = inEnclave
-
 class Securable a where
   mkSecure :: a -> ([ByteString] -> Enclave (Maybe ByteString))
 
