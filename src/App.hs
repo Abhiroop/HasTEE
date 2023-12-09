@@ -1,5 +1,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, StaticPointers #-}
-
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE ConstraintKinds #-}
 
 module App (module App) where
 
@@ -18,7 +19,7 @@ import Network.Simple.TCP
 
 -- mutable references
 liftNewRef :: a -> App (Enclave (Ref a))
-newRef :: a -> Enclave (Ref a)
+newRef     :: a -> Enclave (Ref a)
 readRef    :: Ref a -> Enclave a
 writeRef   :: Ref a -> a -> Enclave ()
 -- immutable value
@@ -97,3 +98,16 @@ readTCPSocket socket = do
   return $ fromStrict $ fromMaybe err msgBody
   where
     err = error "Error parsing request"
+
+
+type RestrictedIO m = (FileIO m, RandomIO m)
+
+class FileIO m where
+  unTrustedReadFile  :: FilePath -> m String
+  unTrustedWriteFile :: FilePath -> String -> m ()
+
+class RandomIO m where
+    type Gen m
+    newGen :: m (Gen m)
+    splitGen :: Gen m -> m (Gen m, Gen m)
+    uniFromGen :: (Int, Int) -> Gen m -> m (Int, Gen m)

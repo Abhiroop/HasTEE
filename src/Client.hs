@@ -29,6 +29,11 @@ data Ref a = RefDummy
 data Enclave a = EnclaveDummy deriving (Functor, Applicative, Monad)
 data Secure a = Secure CallID [ByteString]
 
+instance FileIO Enclave where
+  unTrustedReadFile  _ = EnclaveDummy
+  unTrustedWriteFile _ _ = EnclaveDummy
+
+
 (<@>) :: Binary a => Secure (a -> b) -> a -> Secure b
 (Secure identifier args) <@> arg =
   Secure identifier (encode arg : args)

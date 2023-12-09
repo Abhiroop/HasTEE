@@ -5,8 +5,6 @@
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
 
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE KindSignatures #-}
 module Enclave(module Enclave) where
 
 import Control.Monad.IO.Class
@@ -33,6 +31,10 @@ import Foreign.Storable
 import GHC.IO.Handle.Text
 
 
+import Data.List (intercalate)
+import System.IO (withFile, IOMode(..))
+
+
 type Ref a = IORef a
 newtype Enclave a = Enclave (IO a)
 
@@ -53,6 +55,28 @@ instance Monad Enclave where
 
 data Secure a = SecureDummy
 
+traceSysCall :: String -> [String] -> IO ()
+traceSysCall syscall args = do
+  ctimestamp <- getTimeStamp
+  let logstr = "@" <> show ctimestamp <> "     "  <>
+               syscall <> formatArgs
+  withFile logFile AppendMode $ \hdl -> do
+    hPutStrLn hdl logstr
+  where
+    formatArgs =
+      "(" <> intercalate ", " args <> ")"
+
+instance FileIO Enclave where
+  unTrustedReadFile fp = Enclave $ do
+    traceSysCall "read" [fp]
+    readFile fp
+  unTrustedWriteFile fp str = Enclave $ do
+    traceSysCall "write" [fp, str]
+    writeFile fp str
+
+logFile :: FilePath
+logFile = "calltrace.log"
+
 inEnclaveConstant :: a -> App (Enclave a)
 inEnclaveConstant = return . return
 
@@ -70,10 +94,31 @@ readRef ref = Enclave $ readIORef ref
 writeRef :: Ref a -> a -> Enclave ()
 writeRef ref v = Enclave $ writeIORef ref v
 
+-- XXX: Prone to attack by feeding malicious timestamp
+foreign import ccall "time"
+    c_time :: Ptr CTime -> IO CTime
+
+getTimeStamp :: IO CTime
+getTimeStamp = do
+  currentTimePtr <- malloc :: IO (Ptr CTime)
+  _ <- c_time currentTimePtr
+  currentTime <- peek currentTimePtr
+  free currentTimePtr
+  return currentTime
+
+traceCall :: CallID -> Enclave ()
+traceCall callid = Enclave $ do
+  ctimestamp <- getTimeStamp
+  let logstr = "@" <> show ctimestamp <> "     call(" <> show callid <> ")"
+  withFile logFile AppendMode $ \hdl -> do
+    hPutStrLn hdl logstr
+
 inEnclave :: (Securable a) => a -> App (Secure a)
 inEnclave f = App $ do
   (next_id, remotes) <- get
-  put (next_id + 1, (next_id, \bs -> let Enclave n = mkSecure f bs in n) : remotes)
+  put (next_id + 1, (next_id, \bs ->
+                        let Enclave n = (traceCall next_id) >>
+                                        mkSecure f bs in n) : remotes)
   return SecureDummy
 
 ntimes :: (Securable a) => Int -> a -> App (Secure a)
