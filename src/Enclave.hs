@@ -109,46 +109,43 @@ traceSysCall syscall args = do
       "(" <> intercalate ", " args <> ")"
 
 
-inEnclave :: (Securable a) => a -> App (Secure a)
-inEnclave f = App $ do
-  (next_id, remotes) <- get
-  put (next_id + 1, (next_id, \bs ->
-                        let Enclave n =
-#ifdef MONTRACE
-                              let log_str = show next_id <> "("
-                               in mkSecure log_str f bs
-#else
-                              mkSecure f bs
-#endif
-                        in n) : remotes)
-  return SecureDummy
-
-
 (<@>) :: Binary a => Secure (a -> b) -> a -> Secure b
 (<@>) = error "Access to client not allowed"
 
 
 #ifdef MONTRACE
 
+
+inEnclave :: (Securable a) => String -> a -> App (Secure a)
+inEnclave funcname f = App $ do
+  (next_id, remotes) <- get
+  put (next_id + 1, (next_id, \bs ->
+                        let Enclave n =
+                              let log_str = funcname <> "("
+                               in mkSecure log_str f bs
+                        in n) : remotes)
+  return SecureDummy
+
+
 type TraceString = String
 
 class Securable a where
   mkSecure :: TraceString -> a -> ([ByteString] -> Enclave (Maybe ByteString))
 
-instance (Binary a, Show a) => Securable (Enclave a) where
+instance (Binary a, MonadTrace a) => Securable (Enclave a) where
   mkSecure tracestr m = \_ -> do
     traceCall (tracestr <> ")") -- close opening "("
     a <- m
     -- return trace
-    traceCall $ "output(" <> (show a) <> ")"
+    traceCall $ "output(" <> (traceFmt a) <> ")"
     pure (Just (encode a))
 
-instance (Binary a, Show a, Securable b) => Securable (a -> b) where
+instance (Binary a, MonadTrace a, Securable b) => Securable (a -> b) where
   mkSecure tracestr f = \(x:xs) ->
     let arg = decode x
      in case xs of
-          [] -> mkSecure (tracestr <> show arg) (f arg) xs
-          _  -> mkSecure (tracestr <> show arg <> ",") (f arg) xs
+          [] -> mkSecure (tracestr <> traceFmt arg) (f arg) xs
+          _  -> mkSecure (tracestr <> traceFmt arg <> ",") (f arg) xs
 
 traceCall :: TraceString -> Enclave ()
 traceCall tracestr = Enclave $ do
@@ -158,6 +155,15 @@ traceCall tracestr = Enclave $ do
     hPutStrLn hdl logstr
 
 #else
+
+inEnclave :: (Securable a) => a -> App (Secure a)
+inEnclave f = App $ do
+  (next_id, remotes) <- get
+  put (next_id + 1, (next_id, \bs ->
+                        let Enclave n = mkSecure f bs in n) : remotes)
+  return SecureDummy
+
+
 class Securable a where
   mkSecure :: a -> ([ByteString] -> Enclave (Maybe ByteString))
 

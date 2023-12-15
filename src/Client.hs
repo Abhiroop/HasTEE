@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE ScopedTypeVariables, RankNTypes, TypeApplications #-}
@@ -38,12 +39,25 @@ instance FileIO Enclave where
 (Secure identifier args) <@> arg =
   Secure identifier (encode arg : args)
 
+
+#ifdef MONTRACE
+
+inEnclave :: (Securable a) => String -> a -> App (Secure a)
+inEnclave _ _ = App $ do
+  (next_id, remotes) <- get
+  put (next_id + 1, remotes)
+  return $ Secure next_id []
+
+#else
+
 {- The Securable a constraint is necessary for the Enclave type -}
 inEnclave :: (Securable a) => a -> App (Secure a)
 inEnclave _ = App $ do
   (next_id, remotes) <- get
   put (next_id + 1, remotes)
   return $ Secure next_id []
+
+#endif
 
 class Securable a where
   mkSecure :: a -> ([ByteString] -> Enclave (Maybe ByteString))

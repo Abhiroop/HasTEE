@@ -111,3 +111,7 @@ class RandomIO m where
     newGen :: m (Gen m)
     splitGen :: Gen m -> m (Gen m, Gen m)
     uniFromGen :: (Int, Int) -> Gen m -> m (Int, Gen m)
+
+
+class MonadTrace a where
+  traceFmt :: a -> String
