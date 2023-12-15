@@ -33,8 +33,6 @@ library
   exposed-modules:
       App
       Client
-      Security.Lattice
-      Security.Sec
       Enclave
       DCLabel
   other-modules:
@@ -157,10 +155,6 @@ executable EnclaveIFC-exe
              cbits/add.c
 
   other-modules:
-      Lattice
-      Program
-      Sec
-      SecIO
       Paths_EnclaveIFC
   hs-source-dirs:
       app
