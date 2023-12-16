@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE ScopedTypeVariables, RankNTypes, TypeApplications #-}
+{-# LANGUAGE GADTs, DataKinds, KindSignatures #-}
 {-# OPTIONS_GHC -Wno-missing-methods #-}
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
@@ -25,6 +26,8 @@ import Foreign.Storable
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 
+import GHC.TypeLits
+import Data.Proxy
 
 data Ref l a = RefDummy
 data Enclave l a = EnclaveDummy deriving (Functor, Applicative, Monad)
@@ -37,8 +40,8 @@ data Secure a = Secure CallID [ByteString]
 {- The Securable a constraint is necessary for the Enclave type -}
 inEnclave :: (Securable a, Label l) => LIOState l -> a -> App (Secure a)
 inEnclave _ _ = App $ do
-  (next_id, remotes) <- get
-  put (next_id + 1, remotes)
+  (next_id, remotes, ident) <- get
+  put (next_id + 1, remotes, ident)
   return $ Secure next_id []
 
 -- ntimes :: (Securable a) => Int -> a -> App (Secure a)
@@ -112,15 +115,56 @@ inEnclaveLabeledConstant _ _ = return $ EnclaveDummy
 
 
 
-type Client = IO
+-- | Generalising monads with locations
 
-runClient :: Client a -> App Done
-runClient cl = do
-  v <- liftIO cl
-  return $ v `seq` Done
 
-tryEnclave :: Binary a => Secure (Enclave l a) -> Client (Maybe a)
-tryEnclave (Secure identifier args) = do
+-- | Term-level locations.
+type LocTm = String
+
+-- | Type-level locations.
+type LocTy = Symbol
+
+-- | Convert a type-level location to a term-level location.
+toLocTm :: forall (l :: LocTy). KnownSymbol l => Proxy l -> LocTm
+toLocTm = symbolVal
+
+data Client (l :: LocTy) a where
+  Client :: (KnownSymbol l)
+         => Proxy l -> IO a -> Client l a
+
+
+instance (KnownSymbol l) => Functor (Client l) where
+  fmap f (Client l comp) = Client l (fmap f comp)
+
+instance (KnownSymbol l) => Applicative (Client l) where
+  pure = Client Proxy . pure
+  (Client l1 f) <*> Client l2 a
+    | toLocTm l1 == toLocTm l2 = Client l1 (f <*> a)
+    | otherwise = error "splatting different location types!"
+
+instance (KnownSymbol l) => Monad (Client l) where
+  return = pure
+  Client l ma >>= k = Client l $ do
+    a <- ma
+    let (Client c comp) = k a
+    if (c == l) then comp else error "binding wrong location types!"
+
+instance (KnownSymbol l) => MonadIO (Client l) where
+  liftIO = Client Proxy . liftIO
+
+runClient :: Client l a -> App Done
+runClient (Client loc cl) = App $ do
+  (_, _, loctm) <- get
+  if ((toLocTm loc) == loctm)
+  then do
+    v <- liftIO cl
+    return $ v `seq` Done
+  else return Done -- cl not executed
+
+
+
+tryEnclave :: (Binary a, KnownSymbol loc) => Secure (Enclave l a) -> Client loc (Maybe a)
+tryEnclave (Secure identifier args) = Client Proxy $ do
   {- SENDING REQUEST HERE -}
   connect localhost connectPort $ \(connectionSocket, remoteAddr) -> do
     -- debug logs
@@ -130,11 +174,11 @@ tryEnclave (Secure identifier args) = do
     return $ fmap decode (decode resp :: Maybe ByteString)
   {- SENDING ENDS -}
 
-gateway :: Binary a => Secure (Enclave l a) -> Client a
+gateway :: (Binary a, KnownSymbol loc) => Secure (Enclave l a) -> Client loc a
 gateway closure = fromJust <$> tryEnclave closure
 
-runApp :: App a -> IO a
-runApp (App s) = evalStateT s initAppState
+runApp :: Identifier -> App a -> IO a
+runApp ident (App s) = evalStateT s (initAppState ident)
 
 foreign import ccall "setup_ra_tls_send" setup_ra_tls_send
     :: Ptr CChar -> CSize -> Ptr CChar -> Ptr CChar -> IO CInt
@@ -158,8 +202,8 @@ byteStrLength cptr = go 0 []
 dataPacketSize :: Int
 dataPacketSize = 1024
 
-raTryEnclave :: (Label l, Binary a) => Secure (Enclave l a) -> Client (Maybe a)
-raTryEnclave (Secure identifier args) = do
+raTryEnclave :: (Label l, Binary a, KnownSymbol loc) => Secure (Enclave l a) -> Client loc (Maybe a)
+raTryEnclave (Secure identifier args) = Client Proxy $ do
   let inputBytes = BL.toStrict $ encode $ (identifier, reverse args)
   withCString "native" $ \cstring -> do
     B.useAsCStringLen inputBytes $ \(ptr, len) -> do
@@ -179,14 +223,14 @@ raTryEnclave (Secure identifier args) = do
         return $ fmap decode (decode $ BL.fromStrict byteString :: Maybe ByteString)
 
 --return $ fmap decode $ Just $ encode errorcode
-gatewayRA :: (Binary a, Label l) => Secure (Enclave l a) -> Client a
+gatewayRA :: (Binary a, Label l, KnownSymbol loc) => Secure (Enclave l a) -> Client loc a
 gatewayRA closure = (fromMaybe raerr) <$> (raTryEnclave closure)
   where
     raerr = error "ERR: Remote Attestation failed"
 
 
-runAppRA :: App a -> IO a
-runAppRA (App s) = evalStateT s initAppState
+runAppRA :: Identifier -> App a -> IO a
+runAppRA ident (App s) = evalStateT s (initAppState ident)
 
 
 

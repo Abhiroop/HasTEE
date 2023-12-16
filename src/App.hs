@@ -55,16 +55,17 @@ runApp :: App a -> IO a
 @-}
 
 
+type Identifier = String
 type CallID = Int
 type Method = [ByteString] -> IO (Maybe ByteString)
-type AppState = (CallID, [(CallID, Method)])
+type AppState = (CallID, [(CallID, Method)], Identifier)
 newtype App a = App (StateT AppState IO a)
   deriving (Functor, Applicative, Monad, MonadIO)
 
 data Done = Done
 
-initAppState :: AppState
-initAppState = (0,[])
+initAppState :: Identifier -> AppState
+initAppState str = (0,[], str)
 
 -- Client-enclave communication utils follow
 

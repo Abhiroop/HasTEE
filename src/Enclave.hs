@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE ScopedTypeVariables, RankNTypes, TypeApplications #-}
+{-# LANGUAGE DataKinds, KindSignatures #-}
 {-# OPTIONS_GHC -Wno-missing-methods #-}
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
@@ -37,6 +38,7 @@ import Control.Monad (ap, unless)
 import Data.Dynamic
 import Data.Maybe (fromMaybe)
 
+import GHC.TypeLits
 
 {- FLOATING LABEL Information Flow Control
    The floating is bounded by a clearance label. Bell
@@ -252,8 +254,8 @@ type DCLabeled = Labeled DCLabel
 
 inEnclave :: (Securable a, Label l) => LIOState l -> a -> App (Secure a)
 inEnclave initState f = App $ do
-  (next_id, remotes) <- get
-  put (next_id + 1, (next_id, \bs -> mkSecure initState f bs) : remotes)
+  (next_id, remotes, ident) <- get
+  put (next_id + 1, (next_id, \bs -> mkSecure initState f bs) : remotes, ident)
   return SecureDummy
 
 -- inEnclave :: (Securable a) => a -> App (Secure a)
@@ -307,25 +309,32 @@ instance (Binary a, Label l) => Securable (Enclave l a) where
 instance (Binary a, Securable b) => Securable (a -> b) where
   mkSecure s f = \(x:xs) -> mkSecure s (f $ decode x) xs
 
-data Client a = ClientDummy
+
+-- | Term-level locations.
+type LocTm = String
+
+-- | Type-level locations.
+type LocTy = Symbol
+
+data Client (l :: LocTy) a = ClientDummy
   deriving (Functor, Applicative, Monad, MonadIO)
 
-runClient :: Client a -> App Done
+runClient :: Client l a -> App Done
 runClient _ = return Done
 
-tryEnclave :: (Binary a) => Secure (Enclave l a) -> Client (Maybe a)
+tryEnclave :: (Binary a) => Secure (Enclave l a) -> Client loc (Maybe a)
 tryEnclave _ = ClientDummy
 
-gateway :: Binary a => Secure (Enclave l a) -> Client a
+gateway :: Binary a => Secure (Enclave l a) -> Client loc a
 gateway _ = ClientDummy
 
-unsafeOnEnclave :: Binary a => Secure (Enclave l a) -> Client a
+unsafeOnEnclave :: Binary a => Secure (Enclave l a) -> Client loc a
 unsafeOnEnclave _ = ClientDummy
 
 {-@ The enclave's event loop. @-}
-runApp :: App a -> IO a
-runApp (App s) = do
-  (a, (_, vTable)) <- runStateT s initAppState
+runApp :: Identifier -> App a -> IO a
+runApp ident (App s) = do
+  (a, (_, vTable, _)) <- runStateT s (initAppState ident)
   {- BLOCKING HERE -}
   _ <- serve (Host localhost) connectPort $
     \(connectionSocket, remoteAddr) -> do
@@ -401,9 +410,9 @@ byteStrLength cptr = go 0 []
 dataPacketSize :: Int
 dataPacketSize = 1024
 
-runAppRA :: App a -> IO a
-runAppRA (App s) = do
-  (a, (_, vTable)) <- runStateT s initAppState
+runAppRA :: Identifier -> App a -> IO a
+runAppRA ident (App s) = do
+  (a, (_, vTable, _)) <- runStateT s (initAppState ident)
   flagptr  <- malloc :: IO (Ptr CInt)
   dataptr  <- mallocBytes dataPacketSize :: IO (Ptr CChar)
   poke flagptr 0
@@ -454,7 +463,7 @@ ffiComp tid fptr dptr = do
   then throwTo tid (userError "C server terminated abnormally")
   else throwTo tid (userError "C server terminated gracefully") -- should not happen
 
-gatewayRA :: Binary a => Secure (Enclave l a) -> Client a
+gatewayRA :: Binary a => Secure (Enclave l a) -> Client loc a
 gatewayRA _ = ClientDummy
 
 onEventRA :: [(CallID, Method)] -> ByteString -> IO (BL.ByteString)
