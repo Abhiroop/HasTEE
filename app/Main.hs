@@ -58,6 +58,9 @@ import Client
 data API =
   API { checkpwd :: Secure (String -> EnclaveDC Bool) }
 
+s_t_label :: DCLabel
+s_t_label = False %% False
+
 pwdChecker :: EnclaveDC (DCLabeled String) -> String -> EnclaveDC Bool
 pwdChecker pwd guess = do
   l_pwd <- pwd
@@ -65,7 +68,6 @@ pwdChecker pwd guess = do
   if p == guess
   then return True
   else return False
-
 
 client :: API -> Client "client" ()
 client api = do
@@ -76,7 +78,7 @@ client api = do
 
 ifctest :: App Done
 ifctest = do
-  pwd   <- inEnclaveLabeledConstant (False %% True) "password"
+  pwd   <- inEnclaveLabeledConstant s_t_label "password"
   efunc <- inEnclave dcDefaultState $ pwdChecker pwd
   runClient (client (API efunc))
 

@@ -134,4 +134,5 @@ instance Label HierarchicalLabels where
 -- | Internal state of an 'LIO' computation.
 data LIOState l = LIOState { lioLabel     :: !l -- ^ Current label.
                            , lioClearance :: !l -- ^ Current clearance.
+                           , lioOutLabel  :: !l -- ^ Public channel label
                            } deriving (Eq, Show, Read, Typeable)

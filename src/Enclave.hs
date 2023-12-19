@@ -66,6 +66,9 @@ instance Applicative (Enclave l) where
   pure a = Enclave $ \_ -> pure a
   (<*>) = ap
 
+-- XXX: For Debugging please remove XXX--
+-- instance MonadIO (Enclave l) where
+--   liftIO io = Enclave $ \_ -> io
 
 getLIOStateTCB :: Enclave l (LIOState l)
 getLIOStateTCB = Enclave readIORef
@@ -88,17 +91,20 @@ inEnclaveConstant :: (Label l) => l -> a -> App (Enclave l (Labeled l a))
 inEnclaveConstant l constant = return (label l constant)
 
 -- ignoring exceptions for now
-runLIO :: Enclave l a -> LIOState l -> IO (a, LIOState l)
+runLIO :: (Label l) => Enclave l a -> LIOState l -> IO (a, LIOState l)
 runLIO (Enclave m) s0 = do
   sp <- newIORef s0
   a  <- m sp
   s1 <- readIORef sp
+  unless ((lioLabel s1) `canFlowTo` (lioOutLabel s0)) $
+    error $  "Data cannot flow from " <> (show (lioLabel s1))
+          <> " to public channel labeled " <> (show (lioOutLabel s0))
   return (a, s1)
 
-evalLIO :: (Typeable l) => Enclave l a -> Dynamic -> IO a
+evalLIO :: (Label l) => Enclave l a -> Dynamic -> IO a
 evalLIO lio s_dyn = do
   let s = fromMaybe dynError
-             (fromDynamic s_dyn :: (Typeable l) => Maybe (LIOState l))
+             (fromDynamic s_dyn :: (Label l) => Maybe (LIOState l))
   (a, _) <- runLIO lio s
   return a
   where
@@ -107,9 +113,17 @@ evalLIO lio s_dyn = do
 guardAlloc :: Label l => l -> Enclave l ()
 guardAlloc newl = do
   LIOState { lioLabel = l_cur, lioClearance = c_cur } <- getLIOStateTCB
-  unless ((l_cur `canFlowTo` newl) && (newl `canFlowTo` c_cur)) $
-    error ("Can't flow to " <> (show newl) <>
-           " or below clearance level " <> (show c_cur))
+  unless (l_cur `canFlowTo` newl) $ error ("Can't flow to " <> (show newl))
+  unless (newl `canFlowTo` c_cur) $ error ("Below clearance level " <>
+                                           (show c_cur))
+
+guardAllocP :: PrivDesc l p => Priv p -> l -> Enclave l ()
+guardAllocP p newl = do
+  LIOState { lioLabel = l_cur, lioClearance = c_cur } <- getLIOStateTCB
+  unless (canFlowToP p l_cur newl) $ error ("Can't flow to " <> (show newl))
+  unless (canFlowTo newl c_cur) $ error ("Below clearance level " <>
+                                         (show c_cur))
+
 
 {-| taint l
 Taints the current context with l such that L_cur = (L_cur ⊔ l),
@@ -123,6 +137,14 @@ taint newl = do
     error ((show l') <> " can't flow to " <> (show c_cur))
   modifyLIOStateTCB $ \s -> s { lioLabel = l' }
 
+taintP :: PrivDesc l p => Priv p -> l -> Enclave l ()
+taintP p newl = do
+  LIOState { lioLabel = l_cur, lioClearance = c_cur } <- getLIOStateTCB
+  let l' = l_cur `lub` downgradeP p newl
+  unless (l' `canFlowTo` c_cur) $
+    error ((show l') <> " can't flow to " <> (show c_cur))
+  modifyLIOStateTCB $ \s -> s { lioLabel = l' }
+
 {-| label l a
 Given a label l such that L_cur ⊑ l ⊑ C_cur and a value v, the
 action label l v returns a labeled value that protects v with l
@@ -132,6 +154,11 @@ label l a = do
   guardAlloc l
   return $ LabeledTCB l a
 
+labelP :: PrivDesc l p => Priv p -> l -> a -> Enclave l (Labeled l a)
+labelP p l a = do
+  guardAllocP p l
+  return $ LabeledTCB l a
+
 {-| unlabel lv
 raises the current label, clearance permitting (see `taint`) to the join of
 of lv’s label and the current label, returning the value with the label removed.
@@ -139,6 +166,11 @@ of lv’s label and the current label, returning the value with the label remove
 unlabel :: Label l => Labeled l a -> Enclave l a
 unlabel (LabeledTCB l v) = do
   taint l
+  return v
+
+unlabelP :: PrivDesc l p => Priv p -> Labeled l a -> Enclave l a
+unlabelP p (LabeledTCB l v) = do
+  taintP p l
   return v
 
 {-|
@@ -154,7 +186,10 @@ toLabeled l m executes m without raising L_cur.
 toLabeled :: Label l => l -> Enclave l a -> Enclave l (Labeled l a)
 toLabeled l m = do
   -- | get the label and clearance before running the computation
-  LIOState { lioLabel = l_cur, lioClearance = c_cur } <- getLIOStateTCB
+  LIOState { lioLabel = l_cur
+           , lioClearance = c_cur
+           , lioOutLabel  = l_out
+           } <- getLIOStateTCB
   -- | run the computation now (label will float up)
   res <- m
   -- | grab the current label
@@ -163,16 +198,47 @@ toLabeled l m = do
   unless (l_cur_new `canFlowTo` l) $
     error ("Label " <> (show l) <> " leads to IFC violation")
   -- | restore original label and clearance
-  putLIOStateTCB (LIOState { lioLabel = l_cur, lioClearance = c_cur })
+  putLIOStateTCB (LIOState { lioLabel     = l_cur
+                           , lioClearance = c_cur
+                           , lioOutLabel  = l_out
+                           })
   -- | wrap result in the desired label
   lRes <- label l res
   -- | wrap the `lRes` in the (l_cur, c_cur)'s context
   return lRes
 
+toLabeledP :: PrivDesc l p =>
+              Priv p -> l -> Enclave l a -> Enclave l (Labeled l a)
+toLabeledP p l m = do
+  -- | get the label and clearance before running the computation
+  LIOState { lioLabel = l_cur
+           , lioClearance = c_cur
+           , lioOutLabel  = l_out
+           } <- getLIOStateTCB
+  -- | run the computation now (label will float up)
+  res <- m
+  -- | grab the current label
+  LIOState { lioLabel = l_cur_new} <- getLIOStateTCB
+  -- | check IFC violation
+  unless (canFlowToP p l_cur_new l) $
+    error ("Label " <> (show l) <> " leads to IFC violation")
+  -- | restore original label and clearance
+  putLIOStateTCB (LIOState { lioLabel = l_cur
+                           , lioClearance = c_cur
+                           , lioOutLabel  = l_out
+                           })
+  -- | wrap result in the desired label
+  lRes <- labelP p l res
+  -- | wrap the `lRes` in the (l_cur, c_cur)'s context
+  return lRes
+
+
+
+
+
+
 inEnclaveLabeledConstant :: Label l => l -> a -> App (Enclave l (Labeled l a))
-inEnclaveLabeledConstant l a = return $ do
-  guardAlloc l
-  return $ LabeledTCB l a
+inEnclaveLabeledConstant l a = return $ return $ LabeledTCB l a
 
 data Ref l a = LIORef !l (IORef a)
 
@@ -209,6 +275,9 @@ type EnclaveDC = Enclave DCLabel
 -- | An alias for 'Labeled' values labeled with a 'DCLabel'.
 type DCLabeled = Labeled DCLabel
 
+-- | 'DCLabel' privileges are expressed as a 'CNF' of the principals
+-- whose authority is being exercised.
+type DCPriv = Priv CNF
 
 
 
@@ -258,36 +327,6 @@ inEnclave initState f = App $ do
   put (next_id + 1, (next_id, \bs -> mkSecure initState f bs) : remotes, ident)
   return SecureDummy
 
--- inEnclave :: (Securable a) => a -> App (Secure a)
--- inEnclave f = App $ do
---   (next_id, remotes) <- get
---   put (next_id + 1, (next_id, \bs -> let Enclave n = mkSecure f bs in n) : remotes)
---   return SecureDummy
-
-
-{-
-
-
-
-
-
-
--}
-
--- ntimes :: (Securable a) => Int -> a -> App (Secure a)
--- ntimes n f = App $ do
---   r <- liftIO $ newIORef n
---   (next_id, remotes) <- get
---   put (next_id + 1, (next_id, \bs ->
---     let Enclave s = do
---           c <- Enclave $ do atomicModifyIORef' r $ \i -> (i - 1, i)
---           if c > 0
---           then mkSecure f bs
---           else return Nothing
---     in s) : remotes)
-
-
---   return SecureDummy
 
 (<@>) :: Binary a => Secure (a -> b) -> a -> Secure b
 (<@>) = error "Access to client not allowed"

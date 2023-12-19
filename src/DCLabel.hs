@@ -164,8 +164,10 @@ data DCLabel = DCLabel { dcSecrecy :: CNF
                          -- ^ Describes the authority with which
                          -- immutable data was endorsed, or the
                          -- authority required to modify mutable data.
-                       } deriving (Ord, Show, Eq, Typeable, Read)
+                       } deriving (Ord, Eq, Typeable, Read)
 
+instance Show DCLabel where
+  show (DCLabel sec int) = "<" <> show sec <> "," <> show int <> ">"
 
 class ToCNF c where
   toCNF :: c -> CNF
@@ -245,6 +247,15 @@ instance Label DCLabel where
 instance SpeaksFor CNF where
   speaksFor = cImplies
 
+dcMaxDowngrade :: CNF -> DCLabel -> DCLabel
+dcMaxDowngrade p (DCLabel (CNF ds) int) = DCLabel sec (cUnion p int)
+  where sec = CNF $ S.filter (not . cImplies1 p) ds
+
+instance PrivDesc DCLabel CNF where
+  downgradeP = dcMaxDowngrade
+  canFlowToP p (DCLabel s1 i1) (DCLabel s2 i2) =
+    cImplies (cUnion p s2) s1 && cImplies (cUnion p i1) i2
+
 --
 -- Type aliases
 --
@@ -253,8 +264,10 @@ instance SpeaksFor CNF where
 -- and @'lioClearance' = False '%%' True@ (i.e., the highest
 -- possible clearance).
 dcDefaultState :: LIOState DCLabel
-dcDefaultState = LIOState { lioLabel = dcPublic
-                          , lioClearance = False %% True }
+dcDefaultState = LIOState { lioLabel     = dcPublic
+                          , lioClearance = False %% True
+                          , lioOutLabel  = dcPublic
+                          }
 
 ------------------------------ Privileges----------------------------
 
@@ -374,6 +387,9 @@ class (Label l, SpeaksFor p) => PrivDesc l p where
     -- definitions should behave identically to the default.
     canFlowToP :: p -> l -> l -> Bool
     canFlowToP p l1 l2 = downgradeP p l1 `canFlowTo` l2
+
+
+
 
 instance (SpeaksFor p) => SpeaksFor (Priv p) where
   {-# INLINE speaksFor #-}
