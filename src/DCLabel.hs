@@ -9,7 +9,10 @@ import Data.Set (Set)
 import qualified Data.Set as S
 
 newtype Principal = Principal { principalName :: String }
-  deriving (Ord, Show, Eq, Typeable, Read)
+  deriving (Ord, Eq, Typeable, Read)
+
+instance Show Principal where
+  showsPrec _ (Principal n) = shows n
 
 principal :: String -> Principal
 principal = Principal
