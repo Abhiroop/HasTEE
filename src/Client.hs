@@ -31,7 +31,7 @@ import GHC.TypeLits
 import Data.Proxy
 
 data Ref l a = RefDummy
-data Enclave l a = EnclaveDummy deriving (Functor, Applicative, Monad)
+data Enclave l p a = EnclaveDummy deriving (Functor, Applicative, Monad)
 data Secure a = Secure CallID [ByteString]
 
 (<@>) :: Binary a => Secure (a -> b) -> a -> Secure b
@@ -46,44 +46,44 @@ inEnclave _ _ = App $ do
   return $ Secure next_id []
 
 
-getPrivilege :: Enclave l (Priv p)
+getPrivilege :: Enclave l p (Priv p)
 getPrivilege = EnclaveDummy
 
 
 class Securable a where
   mkSecure :: (Label l)
-           => LIOState l p -> a -> ([ByteString] -> Enclave l (Maybe ByteString))
+           => LIOState l p -> a -> ([ByteString] -> Enclave l p (Maybe ByteString))
 
 -- instance (Binary a) => Securable (Enclave a) where
 --   mkSecure m = \_ -> fmap (Just . encode) m
 
-instance (Binary a, Label l) => Securable (Enclave l a) where
+instance (Binary a, Label l) => Securable (Enclave l p a) where
   mkSecure _ _ = \_ -> EnclaveDummy
 
 instance (Binary a, Securable b) => Securable (a -> b) where
   mkSecure _ _  = \_ -> EnclaveDummy
 
-inEnclaveConstant :: (Label l) => l -> a -> App (Enclave l (Labeled l a))
+inEnclaveConstant :: (Label l) => l -> a -> App (Enclave l p (Labeled l a))
 inEnclaveConstant _ _ = return EnclaveDummy
 
 
 liftNewRef :: Label l
-           => l -> a -> App (Enclave l (Ref l a))
+           => l -> a -> App (Enclave l p (Ref l a))
 liftNewRef _ _ = return EnclaveDummy
 
 
 newRef :: Label l
        => l
        -> a
-       -> Enclave l (Ref l a)
+       -> Enclave l p (Ref l a)
 newRef _ _ = EnclaveDummy
 
 
-readRef :: Label l => Ref l a -> Enclave l a
+readRef :: Label l => Ref l a -> Enclave l p a
 readRef _ = EnclaveDummy
 
 
-writeRef :: Label l => Ref l a -> a -> Enclave l ()
+writeRef :: Label l => Ref l a -> a -> Enclave l p ()
 writeRef _ _ = EnclaveDummy
 
 data Labeled l t = LabeledDummy
@@ -91,33 +91,44 @@ data Labeled l t = LabeledDummy
 
 -- | The main monad type alias to use for 'LIO' computations that are
 -- specific to 'DCLabel's.
-type EnclaveDC = Enclave DCLabel
+type EnclaveDC = Enclave DCLabel DCPriv
 
 -- | An alias for 'Labeled' values labeled with a 'DCLabel'.
 type DCLabeled = Labeled DCLabel
 
+type DCPriv = CNF
 
-taint :: Label l => l -> Enclave l ()
+
+taint :: Label l => l -> Enclave l p ()
 taint _ = EnclaveDummy
 
-label :: Label l => l -> a -> Enclave l (Labeled l a)
+taintP :: Priv p -> l -> Enclave l p ()
+taintP _ _ = EnclaveDummy
+
+label :: Label l => l -> a -> Enclave l p (Labeled l a)
 label _ _ = EnclaveDummy
 
-unlabel :: Label l => Labeled l a -> Enclave l a
+labelP :: Priv p -> l -> a -> Enclave l p (Labeled l a)
+labelP _ _ _ = EnclaveDummy
+
+unlabel :: Label l => Labeled l a -> Enclave l p a
 unlabel _ = EnclaveDummy
 
-unlabelP :: p -> Labeled l a -> Enclave l a
+unlabelP :: Priv p -> Labeled l a -> Enclave l p a
 unlabelP _ _ = EnclaveDummy
 
 
-toLabeled :: Label l => l -> Enclave l a -> Enclave l (Labeled l a)
+toLabeled :: Label l => l -> Enclave l p a -> Enclave l p (Labeled l a)
 toLabeled _ _ = EnclaveDummy
+
+toLabeledP :: Priv p -> l -> Enclave l p a -> Enclave l p (Labeled l a)
+toLabeledP _ _ _ = EnclaveDummy
 
 
 labelOf :: Label l => Labeled l a -> l
 labelOf _ = error "Client not allowed to look at labels"
 
-inEnclaveLabeledConstant :: Label l => l -> a -> App (Enclave l (Labeled l a))
+inEnclaveLabeledConstant :: Label l => l -> a -> App (Enclave l p (Labeled l a))
 inEnclaveLabeledConstant _ _ = return $ EnclaveDummy
 
 
@@ -170,7 +181,8 @@ runClient (Client loc cl) = App $ do
 
 
 
-tryEnclave :: (Binary a, KnownSymbol loc) => Secure (Enclave l a) -> Client loc (Maybe a)
+tryEnclave :: (Binary a, KnownSymbol loc)
+           => Secure (Enclave l p a) -> Client loc (Maybe a)
 tryEnclave (Secure identifier args) = Client Proxy $ do
   {- SENDING REQUEST HERE -}
   connect localhost connectPort $ \(connectionSocket, remoteAddr) -> do
@@ -181,7 +193,7 @@ tryEnclave (Secure identifier args) = Client Proxy $ do
     return $ fmap decode (decode resp :: Maybe ByteString)
   {- SENDING ENDS -}
 
-gateway :: (Binary a, KnownSymbol loc) => Secure (Enclave l a) -> Client loc a
+gateway :: (Binary a, KnownSymbol loc) => Secure (Enclave l p a) -> Client loc a
 gateway closure = fromJust <$> tryEnclave closure
 
 runApp :: Identifier -> App a -> IO a
@@ -209,7 +221,8 @@ byteStrLength cptr = go 0 []
 dataPacketSize :: Int
 dataPacketSize = 1024
 
-raTryEnclave :: (Label l, Binary a, KnownSymbol loc) => Secure (Enclave l a) -> Client loc (Maybe a)
+raTryEnclave :: (Label l, Binary a, KnownSymbol loc)
+             => Secure (Enclave l p a) -> Client loc (Maybe a)
 raTryEnclave (Secure identifier args) = Client Proxy $ do
   let inputBytes = BL.toStrict $ encode $ (identifier, reverse args)
   withCString "native" $ \cstring -> do
@@ -230,7 +243,8 @@ raTryEnclave (Secure identifier args) = Client Proxy $ do
         return $ fmap decode (decode $ BL.fromStrict byteString :: Maybe ByteString)
 
 --return $ fmap decode $ Just $ encode errorcode
-gatewayRA :: (Binary a, Label l, KnownSymbol loc) => Secure (Enclave l a) -> Client loc a
+gatewayRA :: (Binary a, Label l, KnownSymbol loc)
+          => Secure (Enclave l p a) -> Client loc a
 gatewayRA closure = (fromMaybe raerr) <$> (raTryEnclave closure)
   where
     raerr = error "ERR: Remote Attestation failed"
