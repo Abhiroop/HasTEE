@@ -140,6 +140,15 @@ cInsert dnew c@(CNF ds)
 cUnion :: CNF -> CNF -> CNF
 cUnion c (CNF ds) = S.foldr cInsert c ds
 
+{- cOr
+
+ds1 : Set; ds2 : Set
+list = []
+for d1 in ds1:
+ for d2 in ds2:
+   list += (d1 U d2)
+-}
+
 cOr :: CNF -> CNF -> CNF
 cOr (CNF ds1) (CNF ds2) =
   cFromList $ [dUnion d1 d2 | d1 <- S.toList ds1, d2 <- S.toList ds2]

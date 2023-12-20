@@ -111,25 +111,6 @@ class (Eq l, Show l, Read l, Typeable l) => Label l where
 infixl 5 `lub`, `glb`
 infix 4 `canFlowTo`
 
-data HierarchicalLabels = H -- high
-                        | L -- low
-                        deriving (Eq, Show, Read, Typeable)
-
-instance Label HierarchicalLabels where
-  canFlowTo L H = True
-  canFlowTo L L = True
-  canFlowTo H H = True
-  canFlowTo H L = False
-
-  lub H L = H
-  lub L H = H
-  lub L L = L
-  lub H H = H
-
-  glb H L = L
-  glb L H = L
-  glb H H = H
-  glb L L = L
 
 -- | Internal state of an 'LIO' computation.
 data LIOState l = LIOState { lioLabel     :: !l -- ^ Current label.
