@@ -2,7 +2,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 module DCLabel (module DCLabel) where
 
-import App
+import Label -- holds the Label typeclass
 import Data.Dynamic
 import Data.Typeable
 import Data.Set (Set)
@@ -268,18 +268,6 @@ instance PrivDesc DCLabel CNF where
   canFlowToP p (DCLabel s1 i1) (DCLabel s2 i2) =
     cImplies (cUnion p s2) s1 && cImplies (cUnion p i1) i2
 
---
--- Type aliases
---
-
--- | A common default starting state, where @'lioLabel' = 'dcPublic'@
--- and @'lioClearance' = False '%%' True@ (i.e., the highest
--- possible clearance).
-dcDefaultState :: LIOState DCLabel
-dcDefaultState = LIOState { lioLabel     = dcPublic
-                          , lioClearance = False %% True
-                          , lioOutLabel  = dcPublic
-                          }
 
 ------------------------------ Privileges----------------------------
 
@@ -309,6 +297,12 @@ infix 4 `speaksFor`
 --
 -- Privileges
 --
+
+-- | Both PrivTCB and privInit are hidden by design
+-- in HasTEE, the construction of a privilege can
+-- only be done by calling `dcDefaultState`, which
+-- is a library function that initialises the privilege
+
 
 -- | A newtype wrapper that can be used by trusted code to transform a
 -- powerless description of privileges into actual privileges.  The

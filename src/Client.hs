@@ -17,6 +17,7 @@ import Data.Binary(Binary, encode, decode)
 import Network.Simple.TCP
 import App
 import DCLabel
+import Label -- holds the Label typeclass
 
 
 import Foreign.C
@@ -38,18 +39,20 @@ data Secure a = Secure CallID [ByteString]
   Secure identifier (encode arg : args)
 
 {- The Securable a constraint is necessary for the Enclave type -}
-inEnclave :: (Securable a, Label l) => LIOState l -> a -> App (Secure a)
+inEnclave :: (Securable a, Label l) => LIOState l p -> a -> App (Secure a)
 inEnclave _ _ = App $ do
   (next_id, remotes, ident) <- get
   put (next_id + 1, remotes, ident)
   return $ Secure next_id []
 
--- ntimes :: (Securable a) => Int -> a -> App (Secure a)
--- ntimes _ = inEnclave
+
+getPrivilege :: Enclave l (Priv p)
+getPrivilege = EnclaveDummy
+
 
 class Securable a where
   mkSecure :: (Label l)
-           => LIOState l -> a -> ([ByteString] -> Enclave l (Maybe ByteString))
+           => LIOState l p -> a -> ([ByteString] -> Enclave l (Maybe ByteString))
 
 -- instance (Binary a) => Securable (Enclave a) where
 --   mkSecure m = \_ -> fmap (Just . encode) m
@@ -102,6 +105,10 @@ label _ _ = EnclaveDummy
 
 unlabel :: Label l => Labeled l a -> Enclave l a
 unlabel _ = EnclaveDummy
+
+unlabelP :: p -> Labeled l a -> Enclave l a
+unlabelP _ _ = EnclaveDummy
+
 
 toLabeled :: Label l => l -> Enclave l a -> Enclave l (Labeled l a)
 toLabeled _ _ = EnclaveDummy

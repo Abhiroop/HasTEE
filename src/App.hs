@@ -12,6 +12,7 @@ import Data.Maybe(fromMaybe)
 import Network.Simple.TCP
 
 import Data.Dynamic
+import DCLabel
 
 {-@ The EnclaveIFC API for programmers
 
@@ -27,9 +28,6 @@ inEnclaveConstant :: a -> App (Enclave a)
 -- closures
 -- create an escape hatch that can be used however many times you want
 inEnclave :: Securable a => a -> App (Secure a)
-
--- create an escape hatch that can be used only a specific amount of times
-ntimes :: Securable a => Int -> a -> App (Secure a)
 
 -- use the below function to introduce the Client monad
 runClient :: Client a -> App Done
@@ -101,19 +99,20 @@ readTCPSocket socket = do
     err = error "Error parsing request"
 
 
--- Introducing labels
-
-class (Eq l, Show l, Read l, Typeable l) => Label l where
-  lub       :: l -> l -> l
-  glb       :: l -> l -> l
-  canFlowTo :: l -> l -> Bool
-
-infixl 5 `lub`, `glb`
-infix 4 `canFlowTo`
-
-
 -- | Internal state of an 'LIO' computation.
-data LIOState l = LIOState { lioLabel     :: !l -- ^ Current label.
-                           , lioClearance :: !l -- ^ Current clearance.
-                           , lioOutLabel  :: !l -- ^ Public channel label
-                           } deriving (Eq, Show, Read, Typeable)
+data LIOState l p = LIOState { lioLabel     :: !l -- ^ Current label.
+                             , lioClearance :: !l -- ^ Current clearance.
+                             , lioOutLabel  :: !l -- ^ Public channel label
+                             , lioPrivilege :: Priv p -- ^ Monad initialised with privilege p
+                             } deriving (Eq, Show, Typeable)
+
+
+-- | A common default starting state, where @'lioLabel' = 'dcPublic'@
+-- and @'lioClearance' = False '%%' True@ (i.e., the highest
+-- possible clearance).
+dcDefaultState :: p -> LIOState DCLabel p
+dcDefaultState p = LIOState { lioLabel     = dcPublic
+                            , lioClearance = False %% True
+                            , lioOutLabel  = dcPublic
+                            , lioPrivilege = PrivTCB p
+                            }

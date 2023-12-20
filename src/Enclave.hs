@@ -19,6 +19,7 @@ import Network.Simple.TCP
 import System.IO(hFlush, stdout)
 import App
 import DCLabel
+import Label -- holds the Label typeclass
 
 import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy as BL
@@ -48,9 +49,9 @@ import GHC.TypeLits
 
 
 -- | Encriching the Enclave monad with labeled values
-newtype Enclave l a = Enclave (IORef (LIOState l) -> IO a) deriving (Typeable)
+newtype Enclave l p a = Enclave (IORef (LIOState l p) -> IO a) deriving (Typeable)
 
-instance Monad (Enclave l) where
+instance Monad (Enclave l p) where
   return = pure
   (Enclave ma) >>= k = Enclave $ \s -> do
     a <- ma s
@@ -58,40 +59,46 @@ instance Monad (Enclave l) where
       Enclave mb -> mb s
 
 
-instance Functor (Enclave l) where
+instance Functor (Enclave l p) where
   fmap f (Enclave ma) = Enclave $ \s -> fmap f (ma s)
 
 
-instance Applicative (Enclave l) where
+instance Applicative (Enclave l p) where
   pure a = Enclave $ \_ -> pure a
   (<*>) = ap
 
 -- XXX: For Debugging please remove XXX--
--- instance MonadIO (Enclave l) where
+-- instance MonadIO (Enclave l p) where
 --   liftIO io = Enclave $ \_ -> io
 
-getLIOStateTCB :: Enclave l (LIOState l)
+getLIOStateTCB :: Enclave l p (LIOState l p)
 getLIOStateTCB = Enclave readIORef
 
 -- | Set internal state.
-putLIOStateTCB :: LIOState l -> Enclave l ()
+putLIOStateTCB :: LIOState l p -> Enclave l p ()
 putLIOStateTCB s = Enclave $ \sp -> writeIORef sp $! s
 
 -- | Update the internal state given some function.
-modifyLIOStateTCB :: (LIOState l -> LIOState l) -> Enclave l ()
+modifyLIOStateTCB :: (LIOState l p -> LIOState l p) -> Enclave l p ()
 modifyLIOStateTCB f = do
   s <- getLIOStateTCB
   putLIOStateTCB (f s)
+
+
+getPrivilege :: Enclave l p (Priv p)
+getPrivilege = do
+  LIOState { lioPrivilege = lioPriv } <- getLIOStateTCB
+  return lioPriv
 
 data Secure a = SecureDummy
 
 data Labeled l t = LabeledTCB !l t deriving Typeable
 
-inEnclaveConstant :: (Label l) => l -> a -> App (Enclave l (Labeled l a))
+inEnclaveConstant :: (Label l) => l -> a -> App (Enclave l p (Labeled l a))
 inEnclaveConstant l constant = return (label l constant)
 
 -- ignoring exceptions for now
-runLIO :: (Label l) => Enclave l a -> LIOState l -> IO (a, LIOState l)
+runLIO :: (Label l) => Enclave l p a -> LIOState l p -> IO (a, LIOState l p)
 runLIO (Enclave m) s0 = do
   sp <- newIORef s0
   a  <- m sp
@@ -101,23 +108,23 @@ runLIO (Enclave m) s0 = do
           <> " to public channel labeled " <> (show (lioOutLabel s0))
   return (a, s1)
 
-evalLIO :: (Label l) => Enclave l a -> Dynamic -> IO a
+evalLIO :: (Label l, Typeable p) => Enclave l p a -> Dynamic -> IO a
 evalLIO lio s_dyn = do
   let s = fromMaybe dynError
-             (fromDynamic s_dyn :: (Label l) => Maybe (LIOState l))
+             (fromDynamic s_dyn :: (Label l, Typeable p) => Maybe (LIOState l p))
   (a, _) <- runLIO lio s
   return a
   where
     dynError = error "Incorrect label type supplied to evalLIO"
 
-guardAlloc :: Label l => l -> Enclave l ()
+guardAlloc :: Label l => l -> Enclave l p ()
 guardAlloc newl = do
   LIOState { lioLabel = l_cur, lioClearance = c_cur } <- getLIOStateTCB
   unless (l_cur `canFlowTo` newl) $ error ("Can't flow to " <> (show newl))
   unless (newl `canFlowTo` c_cur) $ error ("Below clearance level " <>
                                            (show c_cur))
 
-guardAllocP :: PrivDesc l p => Priv p -> l -> Enclave l ()
+guardAllocP :: PrivDesc l p => Priv p -> l -> Enclave l p ()
 guardAllocP p newl = do
   LIOState { lioLabel = l_cur, lioClearance = c_cur } <- getLIOStateTCB
   unless (canFlowToP p l_cur newl) $ error ("Can't flow to " <> (show newl))
@@ -129,7 +136,7 @@ guardAllocP p newl = do
 Taints the current context with l such that L_cur = (L_cur ⊔ l),
 provided (L_cur ⊔ l) ⊑ C_cur
 -}
-taint :: Label l => l -> Enclave l ()
+taint :: Label l => l -> Enclave l p ()
 taint newl = do
   LIOState { lioLabel = l_cur, lioClearance = c_cur } <- getLIOStateTCB
   let l' = l_cur `lub` newl
@@ -137,7 +144,7 @@ taint newl = do
     error ((show l') <> " can't flow to " <> (show c_cur))
   modifyLIOStateTCB $ \s -> s { lioLabel = l' }
 
-taintP :: PrivDesc l p => Priv p -> l -> Enclave l ()
+taintP :: PrivDesc l p => Priv p -> l -> Enclave l p ()
 taintP p newl = do
   LIOState { lioLabel = l_cur, lioClearance = c_cur } <- getLIOStateTCB
   let l' = l_cur `lub` downgradeP p newl
@@ -149,12 +156,12 @@ taintP p newl = do
 Given a label l such that L_cur ⊑ l ⊑ C_cur and a value v, the
 action label l v returns a labeled value that protects v with l
 -}
-label :: Label l => l -> a -> Enclave l (Labeled l a)
+label :: Label l => l -> a -> Enclave l p (Labeled l a)
 label l a = do
   guardAlloc l
   return $ LabeledTCB l a
 
-labelP :: PrivDesc l p => Priv p -> l -> a -> Enclave l (Labeled l a)
+labelP :: PrivDesc l p => Priv p -> l -> a -> Enclave l p (Labeled l a)
 labelP p l a = do
   guardAllocP p l
   return $ LabeledTCB l a
@@ -163,12 +170,12 @@ labelP p l a = do
 raises the current label, clearance permitting (see `taint`) to the join of
 of lv’s label and the current label, returning the value with the label removed.
 -}
-unlabel :: Label l => Labeled l a -> Enclave l a
+unlabel :: Label l => Labeled l a -> Enclave l p a
 unlabel (LabeledTCB l v) = do
   taint l
   return v
 
-unlabelP :: PrivDesc l p => Priv p -> Labeled l a -> Enclave l a
+unlabelP :: PrivDesc l p => Priv p -> Labeled l a -> Enclave l p a
 unlabelP p (LabeledTCB l v) = do
   taintP p l
   return v
@@ -183,12 +190,13 @@ labelOf (LabeledTCB l _) = l
 Given a label l such that L_cur ⊑ l ⊑ C_cur and an LIO action m,
 toLabeled l m executes m without raising L_cur.
 -}
-toLabeled :: Label l => l -> Enclave l a -> Enclave l (Labeled l a)
+toLabeled :: Label l => l -> Enclave l p a -> Enclave l p (Labeled l a)
 toLabeled l m = do
   -- | get the label and clearance before running the computation
   LIOState { lioLabel = l_cur
            , lioClearance = c_cur
            , lioOutLabel  = l_out
+           , lioPrivilege = l_priv
            } <- getLIOStateTCB
   -- | run the computation now (label will float up)
   res <- m
@@ -201,6 +209,7 @@ toLabeled l m = do
   putLIOStateTCB (LIOState { lioLabel     = l_cur
                            , lioClearance = c_cur
                            , lioOutLabel  = l_out
+                           , lioPrivilege = l_priv
                            })
   -- | wrap result in the desired label
   lRes <- label l res
@@ -208,12 +217,13 @@ toLabeled l m = do
   return lRes
 
 toLabeledP :: PrivDesc l p =>
-              Priv p -> l -> Enclave l a -> Enclave l (Labeled l a)
+              Priv p -> l -> Enclave l p a -> Enclave l p (Labeled l a)
 toLabeledP p l m = do
   -- | get the label and clearance before running the computation
   LIOState { lioLabel = l_cur
            , lioClearance = c_cur
            , lioOutLabel  = l_out
+           , lioPrivilege = l_priv
            } <- getLIOStateTCB
   -- | run the computation now (label will float up)
   res <- m
@@ -226,6 +236,7 @@ toLabeledP p l m = do
   putLIOStateTCB (LIOState { lioLabel = l_cur
                            , lioClearance = c_cur
                            , lioOutLabel  = l_out
+                           , lioPrivilege = l_priv
                            })
   -- | wrap result in the desired label
   lRes <- labelP p l res
@@ -237,7 +248,7 @@ toLabeledP p l m = do
 
 
 
-inEnclaveLabeledConstant :: Label l => l -> a -> App (Enclave l (Labeled l a))
+inEnclaveLabeledConstant :: Label l => l -> a -> App (Enclave l p (Labeled l a))
 inEnclaveLabeledConstant l a = return $ return $ LabeledTCB l a
 
 data Ref l a = LIORef !l (IORef a)
@@ -245,24 +256,24 @@ data Ref l a = LIORef !l (IORef a)
 newRef :: Label l
        => l                   -- ^ Label of reference
        -> a                   -- ^ Initial value
-       -> Enclave l (Ref l a) -- ^ Mutable reference
+       -> Enclave l p (Ref l a) -- ^ Mutable reference
 newRef l a = do
   guardAlloc l
   Enclave $ \_ -> (LIORef l `fmap` newIORef a)
 
 
 liftNewRef :: Label l
-           => l -> a -> App (Enclave l (Ref l a))
+           => l -> a -> App (Enclave l p (Ref l a))
 liftNewRef l a = return $ newRef l a
 
 
-readRef :: Label l => Ref l a -> Enclave l a
+readRef :: Label l => Ref l a -> Enclave l p a
 readRef (LIORef l ref) = do
   taint l
   Enclave (\_ -> readIORef ref)
 
 
-writeRef :: Label l => Ref l a -> a -> Enclave l ()
+writeRef :: Label l => Ref l a -> a -> Enclave l p ()
 writeRef (LIORef l ref) v = do
   guardAlloc l
   Enclave (\_ -> writeIORef ref v)
@@ -270,15 +281,16 @@ writeRef (LIORef l ref) v = do
 
 -- | The main monad type alias to use for 'LIO' computations that are
 -- specific to 'DCLabel's.
-type EnclaveDC = Enclave DCLabel
+type EnclaveDC = Enclave DCLabel DCPriv
 
 -- | An alias for 'Labeled' values labeled with a 'DCLabel'.
 type DCLabeled = Labeled DCLabel
 
+
+-- XXX: Different from the LIO monad where DCPriv = Priv CNF
 -- | 'DCLabel' privileges are expressed as a 'CNF' of the principals
 -- whose authority is being exercised.
-type DCPriv = Priv CNF
-
+type DCPriv = CNF
 
 
 ------ Previous Non-LIO---------
@@ -321,7 +333,7 @@ type DCPriv = Priv CNF
 -- writeRef ref v = Enclave $ writeIORef ref v
 
 
-inEnclave :: (Securable a, Label l) => LIOState l -> a -> App (Secure a)
+inEnclave :: (Securable a, Label l, Typeable p) => LIOState l p -> a -> App (Secure a)
 inEnclave initState f = App $ do
   (next_id, remotes, ident) <- get
   put (next_id + 1, (next_id, \bs -> mkSecure initState f bs) : remotes, ident)
@@ -333,10 +345,10 @@ inEnclave initState f = App $ do
 
 
 class Securable a where
-  mkSecure :: (Label l)
-           => LIOState l -> a -> ([ByteString] -> IO (Maybe ByteString))
+  mkSecure :: (Label l, Typeable p)
+           => LIOState l p -> a -> ([ByteString] -> IO (Maybe ByteString))
 
-instance (Binary a, Label l) => Securable (Enclave l a) where
+instance (Binary a, Label l, Typeable p) => Securable (Enclave l p a) where
   mkSecure s m = \_ -> fmap (Just . encode) (evalLIO m (toDyn s))
 
 
@@ -361,13 +373,13 @@ data Client (l :: LocTy) a = ClientDummy
 runClient :: Client l a -> App Done
 runClient _ = return Done
 
-tryEnclave :: (Binary a) => Secure (Enclave l a) -> Client loc (Maybe a)
+tryEnclave :: (Binary a) => Secure (Enclave l p a) -> Client loc (Maybe a)
 tryEnclave _ = ClientDummy
 
-gateway :: Binary a => Secure (Enclave l a) -> Client loc a
+gateway :: Binary a => Secure (Enclave l p a) -> Client loc a
 gateway _ = ClientDummy
 
-unsafeOnEnclave :: Binary a => Secure (Enclave l a) -> Client loc a
+unsafeOnEnclave :: Binary a => Secure (Enclave l p a) -> Client loc a
 unsafeOnEnclave _ = ClientDummy
 
 {-@ The enclave's event loop. @-}
@@ -502,7 +514,7 @@ ffiComp tid fptr dptr = do
   then throwTo tid (userError "C server terminated abnormally")
   else throwTo tid (userError "C server terminated gracefully") -- should not happen
 
-gatewayRA :: Binary a => Secure (Enclave l a) -> Client loc a
+gatewayRA :: Binary a => Secure (Enclave l p a) -> Client loc a
 gatewayRA _ = ClientDummy
 
 onEventRA :: [(CallID, Method)] -> ByteString -> IO (BL.ByteString)
