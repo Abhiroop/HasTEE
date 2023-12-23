@@ -34,6 +34,7 @@ data Ref l a = RefDummy
 data Enclave l p a = EnclaveDummy deriving (Functor, Applicative, Monad)
 data Secure a = Secure CallID [ByteString]
 
+
 (<@>) :: Binary a => Secure (a -> b) -> a -> Secure b
 (Secure identifier args) <@> arg =
   Secure identifier (encode arg : args)
@@ -71,6 +72,9 @@ liftNewRef :: Label l
            => l -> a -> App (Enclave l p (Ref l a))
 liftNewRef _ _ = return EnclaveDummy
 
+liftNewRefP :: p -> l -> a -> App (Enclave l p (Ref l a))
+liftNewRefP _ _ _ = return EnclaveDummy
+
 
 newRef :: Label l
        => l
@@ -78,15 +82,28 @@ newRef :: Label l
        -> Enclave l p (Ref l a)
 newRef _ _ = EnclaveDummy
 
+newRefP :: Priv p
+        -> l
+        -> a
+        -> Enclave l p (Ref l a)
+newRefP _ _ _ = EnclaveDummy
+
 
 readRef :: Label l => Ref l a -> Enclave l p a
 readRef _ = EnclaveDummy
+
+readRefP :: Priv p ->  Ref l a -> Enclave l p a
+readRefP _ _ = EnclaveDummy
 
 
 writeRef :: Label l => Ref l a -> a -> Enclave l p ()
 writeRef _ _ = EnclaveDummy
 
-data Labeled l t = LabeledDummy
+writeRefP :: Priv p -> Ref l a -> a -> Enclave l p ()
+writeRefP _ _ _ = EnclaveDummy
+
+
+-- data Labeled l t = LabeledDummy
 
 
 -- | The main monad type alias to use for 'LIO' computations that are
@@ -98,6 +115,7 @@ type DCLabeled = Labeled DCLabel
 
 type DCPriv = CNF
 
+type DCRef = Ref DCLabel
 
 taint :: Label l => l -> Enclave l p ()
 taint _ = EnclaveDummy
@@ -131,6 +149,15 @@ labelOf _ = error "Client not allowed to look at labels"
 inEnclaveLabeledConstant :: Label l => l -> a -> App (Enclave l p (Labeled l a))
 inEnclaveLabeledConstant _ _ = return $ EnclaveDummy
 
+
+
+clientLabel :: (Label l, KnownSymbol loc, Binary l, Binary a)
+            => l -> a -> Client loc (Labeled l a)
+clientLabel l a = return (LabeledTCB l a)
+
+clientUnLabel :: (Label l, KnownSymbol loc, Binary l, Binary a)
+              => Labeled l a -> Client loc a
+clientUnLabel (LabeledTCB _ a) = return a
 
 
 -- | Generalising monads with locations

@@ -1,4 +1,4 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, StaticPointers #-}
+{-# LANGUAGE GADTs, GeneralizedNewtypeDeriving, StaticPointers #-}
 
 
 module App (module App) where
@@ -13,6 +13,7 @@ import Network.Simple.TCP
 
 import Data.Dynamic
 import DCLabel
+import qualified Data.Binary as B
 
 {-@ The EnclaveIFC API for programmers
 
@@ -116,3 +117,15 @@ dcDefaultState p = LIOState { lioLabel     = dcPublic
                             , lioOutLabel  = dcPublic
                             , lioPrivilege = PrivTCB p
                             }
+
+-- data Labeled l t = LabeledTCB !l t deriving Typeable
+
+data Labeled l t where
+  LabeledTCB :: (Binary l, Binary t) => l -> t -> Labeled l t
+
+instance (Binary l, Binary t) => Binary (Labeled l t) where
+  put (LabeledTCB l t) = B.put l >> B.put t
+  get = do
+    l <- B.get
+    t <- B.get
+    return (LabeledTCB l t)

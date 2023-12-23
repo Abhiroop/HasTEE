@@ -1,15 +1,20 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveAnyClass #-}
+
 module DCLabel (module DCLabel) where
 
 import Label -- holds the Label typeclass
+import Data.Binary
 import Data.Dynamic
 import Data.Typeable
 import Data.Set (Set)
+import GHC.Generics (Generic)
 import qualified Data.Set as S
 
 newtype Principal = Principal { principalName :: String }
-  deriving (Ord, Eq, Typeable, Read)
+  deriving (Ord, Eq, Typeable, Read, Generic, Binary)
 
 instance Show Principal where
   showsPrec _ (Principal n) = shows n
@@ -20,7 +25,7 @@ principal = Principal
 
 -- Disjunctive clauses
 newtype Disjunction = Disjunction { dToSet :: Set Principal }
-  deriving (Ord, Eq, Typeable, Read)
+  deriving (Ord, Eq, Typeable, Read, Generic, Binary)
 
 instance Semigroup Disjunction where
   (<>) = dUnion
@@ -66,7 +71,7 @@ dImplies (Disjunction ps1) (Disjunction ps2)
 
 -- Conjunctive Normal Form (CNF) Formulas
 newtype CNF = CNF { cToSet :: Set Disjunction }
-  deriving (Ord, Eq, Typeable, Read)
+  deriving (Ord, Eq, Typeable, Read, Generic, Binary)
 
 instance Semigroup CNF where
   (<>) = cUnion
@@ -176,7 +181,7 @@ data DCLabel = DCLabel { dcSecrecy :: CNF
                          -- ^ Describes the authority with which
                          -- immutable data was endorsed, or the
                          -- authority required to modify mutable data.
-                       } deriving (Ord, Eq, Typeable, Read)
+                       } deriving (Ord, Eq, Typeable, Read, Generic, Binary)
 
 instance Show DCLabel where
   show (DCLabel sec int) = "<" <> show sec <> "," <> show int <> ">"
@@ -297,12 +302,6 @@ infix 4 `speaksFor`
 --
 -- Privileges
 --
-
--- | Both PrivTCB and privInit are hidden by design
--- in HasTEE, the construction of a privilege can
--- only be done by calling `dcDefaultState`, which
--- is a library function that initialises the privilege
-
 
 -- | A newtype wrapper that can be used by trusted code to transform a
 -- powerless description of privileges into actual privileges.  The

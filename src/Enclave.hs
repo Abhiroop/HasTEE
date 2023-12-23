@@ -67,10 +67,6 @@ instance Applicative (Enclave l p) where
   pure a = Enclave $ \_ -> pure a
   (<*>) = ap
 
--- XXX: For Debugging please remove XXX--
--- instance MonadIO (Enclave l p) where
---   liftIO io = Enclave $ \_ -> io
-
 getLIOStateTCB :: Enclave l p (LIOState l p)
 getLIOStateTCB = Enclave readIORef
 
@@ -92,9 +88,8 @@ getPrivilege = do
 
 data Secure a = SecureDummy
 
-data Labeled l t = LabeledTCB !l t deriving Typeable
-
-inEnclaveConstant :: (Label l) => l -> a -> App (Enclave l p (Labeled l a))
+inEnclaveConstant :: (Label l, Binary l, Binary a)
+                  => l -> a -> App (Enclave l p (Labeled l a))
 inEnclaveConstant l constant = return (label l constant)
 
 -- ignoring exceptions for now
@@ -103,6 +98,7 @@ runLIO (Enclave m) s0 = do
   sp <- newIORef s0
   a  <- m sp
   s1 <- readIORef sp
+  -- XXX: if `a` is `()` should we just let it pass? is that past nonintereference?
   unless ((lioLabel s1) `canFlowTo` (lioOutLabel s0)) $
     error $  "Data cannot flow from " <> (show (lioLabel s1))
           <> " to public channel labeled " <> (show (lioOutLabel s0))
@@ -156,12 +152,13 @@ taintP p newl = do
 Given a label l such that L_cur ⊑ l ⊑ C_cur and a value v, the
 action label l v returns a labeled value that protects v with l
 -}
-label :: Label l => l -> a -> Enclave l p (Labeled l a)
+label :: (Label l, Binary l, Binary a) => l -> a -> Enclave l p (Labeled l a)
 label l a = do
   guardAlloc l
   return $ LabeledTCB l a
 
-labelP :: PrivDesc l p => Priv p -> l -> a -> Enclave l p (Labeled l a)
+labelP :: (PrivDesc l p, Binary l, Binary a)
+       => Priv p -> l -> a -> Enclave l p (Labeled l a)
 labelP p l a = do
   guardAllocP p l
   return $ LabeledTCB l a
@@ -190,7 +187,8 @@ labelOf (LabeledTCB l _) = l
 Given a label l such that L_cur ⊑ l ⊑ C_cur and an LIO action m,
 toLabeled l m executes m without raising L_cur.
 -}
-toLabeled :: Label l => l -> Enclave l p a -> Enclave l p (Labeled l a)
+toLabeled :: (Label l, Binary l, Binary a)
+          => l -> Enclave l p a -> Enclave l p (Labeled l a)
 toLabeled l m = do
   -- | get the label and clearance before running the computation
   LIOState { lioLabel = l_cur
@@ -216,7 +214,7 @@ toLabeled l m = do
   -- | wrap the `lRes` in the (l_cur, c_cur)'s context
   return lRes
 
-toLabeledP :: PrivDesc l p =>
+toLabeledP :: (PrivDesc l p, Binary l, Binary a) =>
               Priv p -> l -> Enclave l p a -> Enclave l p (Labeled l a)
 toLabeledP p l m = do
   -- | get the label and clearance before running the computation
@@ -248,7 +246,8 @@ toLabeledP p l m = do
 
 
 
-inEnclaveLabeledConstant :: Label l => l -> a -> App (Enclave l p (Labeled l a))
+inEnclaveLabeledConstant :: (Label l, Binary l, Binary a)
+                         => l -> a -> App (Enclave l p (Labeled l a))
 inEnclaveLabeledConstant l a = return $ return $ LabeledTCB l a
 
 data Ref l a = LIORef !l (IORef a)
@@ -261,10 +260,32 @@ newRef l a = do
   guardAlloc l
   Enclave $ \_ -> (LIORef l `fmap` newIORef a)
 
+newRefP :: PrivDesc l p
+        => Priv p              -- ^ Privilege
+        -> l                   -- ^ Label of reference
+        -> a                   -- ^ Initial value
+        -> Enclave l p (Ref l a) -- ^ Mutable reference
+newRefP p l a = do
+  guardAllocP p l
+  Enclave $ \_ -> (LIORef l `fmap` newIORef a)
+
 
 liftNewRef :: Label l
            => l -> a -> App (Enclave l p (Ref l a))
-liftNewRef l a = return $ newRef l a
+liftNewRef l a = App $ do
+  r <- liftIO $ newIORef a
+  return $ do
+    guardAlloc l
+    return (LIORef l r)
+
+
+liftNewRefP :: PrivDesc l p
+            => Priv p -> l -> a -> App (Enclave l p (Ref l a))
+liftNewRefP p l a = App $ do
+  r <- liftIO $ newIORef a
+  return $ do
+    guardAllocP p l
+    return (LIORef l r)
 
 
 readRef :: Label l => Ref l a -> Enclave l p a
@@ -272,10 +293,20 @@ readRef (LIORef l ref) = do
   taint l
   Enclave (\_ -> readIORef ref)
 
+readRefP :: PrivDesc l p => Priv p -> Ref l a -> Enclave l p a
+readRefP p (LIORef l ref) = do
+  taintP p l
+  Enclave (\_ -> readIORef ref)
+
 
 writeRef :: Label l => Ref l a -> a -> Enclave l p ()
 writeRef (LIORef l ref) v = do
   guardAlloc l
+  Enclave (\_ -> writeIORef ref v)
+
+writeRefP :: PrivDesc l p => Priv p -> Ref l a -> a -> Enclave l p ()
+writeRefP p (LIORef l ref) v = do
+  guardAllocP p l
   Enclave (\_ -> writeIORef ref v)
 
 
@@ -292,6 +323,15 @@ type DCLabeled = Labeled DCLabel
 -- whose authority is being exercised.
 type DCPriv = CNF
 
+type DCRef = Ref DCLabel
+
+
+
+clientLabel :: l -> a -> Client loc (Labeled l a)
+clientLabel _ _ = ClientDummy
+
+clientUnLabel :: Labeled l a -> Client loc a
+clientUnLabel _ = ClientDummy
 
 ------ Previous Non-LIO---------
 
