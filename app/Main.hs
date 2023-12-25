@@ -1,12 +1,17 @@
 {-# LANGUAGE CPP #-}
-
 {-# LANGUAGE DataKinds #-}
+
 module Main where
 
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad (join)
 import Data.Binary
 import Data.List (groupBy, sortBy)
+
+
+import Crypto.PubKey.RSA.PKCS15
+
+import qualified Data.ByteString as B
 
 import App
 import DCLabel
@@ -47,6 +52,21 @@ import Client
     type DCLabel = Hash
     where hash :: Hash
           hash = hash (hash secrecy, hash integrity)
+
+    Problem
+    -------
+    Anyone who calls `runQ :: Secure (EnclaveDC Result)` gets the analytics
+    result, that can partially (or sometimes entirely) reveal the
+    confidential data.
+    Solution
+    --------
+    Public-Private cryptography
+    runQ :: Secure (EnclaveDC Hash)
+    runQ should internally do `encrpyt org2_pubK result` and now
+    except org2, no one can decrypt this data as they dont have the private
+    key. org2 can do `decrypt org2_privK result`
+
+
 
 @-}
 
@@ -89,6 +109,7 @@ instance Binary Row where
 
 type DB     = [DCLabeled Row]
 type Result = [(CovidVariant, Age)] -- gives rounded up mean age
+type ResultEncrypted = B.ByteString
 
 database :: DB
 database = []
@@ -100,11 +121,17 @@ sendData enc_ref_db labeledRow = do
   writeRef ref_db (labeledRow : datas)
 
 
-runQuery :: EnclaveDC (DCRef DB) -> Priv CNF -> EnclaveDC Result
+runQuery :: EnclaveDC (DCRef DB) -> Priv CNF -> EnclaveDC ResultEncrypted
 runQuery enc_ref_db priv = do
   labeled_rows <- join $ readRef <$> enc_ref_db
-  rows <- mapM (unlabelP priv) labeled_rows
-  return (query1 rows)
+  rows         <- mapM (unlabelP priv) labeled_rows
+  pubK         <- liftIO $ read <$> readFile "ssl/public.key"
+  res_enc      <- liftIO $ encrypt pubK (B.toStrict $ encode $ query1 rows)
+  case res_enc of
+    Left err -> do
+      liftIO $ putStrLn (show err)
+      return B.empty
+    Right bytestr -> return bytestr
 
 
 query1 :: [Row] -> Result
@@ -119,7 +146,7 @@ query1 = map collate
 
 data API =
   API { datasend :: Secure (DCLabeled Row -> EnclaveDC ())
-      , runQ     :: Secure (EnclaveDC Result)
+      , runQ     :: Secure (EnclaveDC ResultEncrypted)
       }
 
 
@@ -145,9 +172,15 @@ client1 api = do
 
 client2 :: API -> Client "org2" ()
 client2 api = do
-  res <- gatewayRA (runQ api)
-  liftIO $ putStrLn "Analytics result"
-  liftIO $ putStrLn (show res)
+  res_enc <- gatewayRA (runQ api)
+  privK   <- liftIO $ read <$> readFile "ssl/private.key"
+  res     <- liftIO $ decryptSafer privK res_enc
+  case res of
+    Left err -> liftIO $ putStrLn $ show err
+    Right bytestr -> do
+      let result = decode (B.fromStrict bytestr) :: Result
+      liftIO $ putStrLn "Analytics result"
+      liftIO $ putStrLn (show result)
 
 -- Assume rows are fetched from the database
 row1, row2, row3 :: Row

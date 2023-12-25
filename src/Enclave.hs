@@ -67,6 +67,17 @@ instance Applicative (Enclave l p) where
   pure a = Enclave $ \_ -> pure a
   (<*>) = ap
 
+instance (Label l) => MonadIO (Enclave l p) where
+  liftIO io = Enclave $ \ioref -> do
+    s <- readIORef ioref
+    -- | Dynamic Check before IO operation
+    unless ((lioLabel s) `canFlowTo` (lioOutLabel s)) $
+      error "IO operation to public channel not permitted"
+    -- | Run IO computation
+    a <- io
+    -- | Return result
+    return a
+
 getLIOStateTCB :: Enclave l p (LIOState l p)
 getLIOStateTCB = Enclave readIORef
 

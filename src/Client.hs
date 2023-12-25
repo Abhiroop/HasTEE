@@ -31,7 +31,7 @@ import GHC.TypeLits
 import Data.Proxy
 
 data Ref l a = RefDummy
-data Enclave l p a = EnclaveDummy deriving (Functor, Applicative, Monad)
+data Enclave l p a = EnclaveDummy deriving (Functor, Applicative, Monad, MonadIO)
 data Secure a = Secure CallID [ByteString]
 
 
