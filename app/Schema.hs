@@ -18,9 +18,21 @@ import Client
 -- check binary-typed https://hackage.haskell.org/package/binary-typed provides
 -- typed :: Typeable a => TypeFormat -> a -> Typed a
 -- Typed a is serializable
--- Then there is erase :: Typed a -> a
+-- Then there is erase :: Typed a -> a -- loses type information
 -- No Proxies needed
 -- Typed a allows serlializing TypeRep by removing the unserializable parts
+
+{-@
+
+check out https://hackage.haskell.org/package/hashabler-1.2.1
+
+Very tediously written hand-crafted implementation of hashing types
+
+@-}
+
+
+
+
 
 foo :: B.ByteString
 foo = let intTypeRep = typeOf (1 :: Int)
