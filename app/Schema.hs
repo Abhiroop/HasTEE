@@ -31,6 +31,17 @@ Very tediously written hand-crafted implementation of hashing types
 @-}
 
 
+{-@
+
+Simply use https://hackage.haskell.org/package/concrete-typerep-0.1.0.2/docs/Data-ConcreteTypeRep.html
+
+cTypeOf :: (Typeable a) => a -> ConcreteTypeRep
+
+
+ConcreteTypeRep has Binary instances and can be serialized
+
+@-}
+
 
 
 
