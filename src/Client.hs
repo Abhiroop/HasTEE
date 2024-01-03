@@ -144,7 +144,7 @@ toLabeledP _ _ _ = EnclaveDummy
 
 
 labelOf :: Label l => Labeled l a -> l
-labelOf _ = error "Client not allowed to look at labels"
+labelOf (LabeledTCB l _) = l
 
 inEnclaveLabeledConstant :: Label l => l -> a -> App (Enclave l p (Labeled l a))
 inEnclaveLabeledConstant _ _ = return $ EnclaveDummy
