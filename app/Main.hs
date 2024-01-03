@@ -26,6 +26,8 @@ import Client
 
     There are 3 organisations;
     org1 and org2 are the data provider and org3 carries out the analytics.
+    Analytics combines ONLY the covid strains common between org1 and org2
+    and gives the mean infected age associated with that strain.
     Because org1 and org2 are providing confidential data they uses the new
     ```
     clientLabel :: (Label l , Binary l , Binary a)
