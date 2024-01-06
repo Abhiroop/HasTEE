@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE ScopedTypeVariables, RankNTypes, TypeApplications #-}
@@ -40,6 +41,11 @@ import Data.Dynamic
 import Data.Maybe (fromMaybe)
 
 import GHC.TypeLits
+
+#ifdef INTEGRITY
+import Crypto.Hash.Algorithms (SHA512)
+import Crypto.PubKey.RSA.PKCS15
+#endif
 
 {- FLOATING LABEL Information Flow Control
    The floating is bounded by a clearance label. Bell
@@ -568,6 +574,26 @@ ffiComp tid fptr dptr = do
 gatewayRA :: Binary a => Secure (Enclave l p a) -> Client loc a
 gatewayRA _ = ClientDummy
 
+#ifdef INTEGRITY
+onEventRA :: [(CallID, Method)] -> ByteString -> IO (BL.ByteString)
+onEventRA mapping inmsg = do
+  maybemsg <- sigVerification inmsg
+  case maybemsg of
+    Nothing -> do
+      let failedverif = handleVoidTy $ encode ()
+      return (BL.append (msgSize failedverif) failedverif)
+    Just incoming -> do
+      let (identifier, args) = decode incoming :: (CallID, [ByteString])
+          Just f = lookup identifier mapping
+      result <- encode <$> f args
+      let res = handleVoidTy result -- the () type cannot be sent over wire
+      return (BL.append (msgSize res) res)
+  where
+    msgSize r = encode $ BL.length r
+    handleVoidTy r = if (BL.length r == 0) -- the () type has msg length 0
+                     then encode '\0'
+                     else r
+#else
 onEventRA :: [(CallID, Method)] -> ByteString -> IO (BL.ByteString)
 onEventRA mapping incoming = do
   let (identifier, args) = decode incoming :: (CallID, [ByteString])
@@ -580,6 +606,7 @@ onEventRA mapping incoming = do
     handleVoidTy r = if (BL.length r == 0) -- the () type has msg length 0
                      then encode '\0'
                      else r
+#endif
 
 -- Set all characters in the C string to \0
 memsetToZero :: Ptr CChar -> Int -> IO ()
@@ -596,3 +623,15 @@ printDecimalValues :: B.ByteString -> IO ()
 printDecimalValues bs = do
   let decimalValues = map ord (BC.unpack bs)
   putStrLn (show decimalValues)
+
+
+#ifdef INTEGRITY
+-- Integrity Checking with Digital Signatures
+sigVerification :: BL.ByteString -> IO (Maybe BL.ByteString)
+sigVerification sigmsg = do
+  let (sig_m, m) = decode sigmsg :: (B.ByteString, B.ByteString)
+  pubK <- read <$> readFile "ssl/public.key"
+  if (verify (Nothing :: Maybe SHA512) pubK m sig_m)
+  then return $ Just (BL.fromStrict m)
+  else return $ Nothing
+#endif

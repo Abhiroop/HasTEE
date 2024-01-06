@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE ScopedTypeVariables, RankNTypes, TypeApplications #-}
@@ -29,6 +30,11 @@ import qualified Data.ByteString.Lazy as BL
 
 import GHC.TypeLits
 import Data.Proxy
+
+#ifdef INTEGRITY
+import Crypto.Hash.Algorithms (SHA512)
+import Crypto.PubKey.RSA.PKCS15
+#endif
 
 data Ref l a = RefDummy
 data Enclave l p a = EnclaveDummy deriving (Functor, Applicative, Monad, MonadIO)
@@ -251,7 +257,12 @@ dataPacketSize = 1024
 raTryEnclave :: (Label l, Binary a, KnownSymbol loc)
              => Secure (Enclave l p a) -> Client loc (Maybe a)
 raTryEnclave (Secure identifier args) = Client Proxy $ do
+#ifdef INTEGRITY
+  let inputBytes' = BL.toStrict $ encode $ (identifier, reverse args)
+  inputBytes <- createSigMsg inputBytes'
+#else
   let inputBytes = BL.toStrict $ encode $ (identifier, reverse args)
+#endif
   withCString "native" $ \cstring -> do
     B.useAsCStringLen inputBytes $ \(ptr, len) -> do
       respptr  <- mallocBytes dataPacketSize :: IO (Ptr CChar)
@@ -281,12 +292,14 @@ runAppRA :: Identifier -> App a -> IO a
 runAppRA ident (App s) = evalStateT s (initAppState ident)
 
 
-
-  -- {- SENDING REQUEST HERE -}
-  -- connect localhost connectPort $ \(connectionSocket, remoteAddr) -> do
-  --   -- debug logs
-  --   putStrLn $ "Connection established to " ++ show remoteAddr
-  --   sendLazy connectionSocket $ createPayload (identifier, reverse args)
-  --   resp <- readTCPSocket connectionSocket
-  --   return $ fmap decode (decode resp :: Maybe ByteString)
-  -- {- SENDING ENDS -}
+#ifdef INTEGRITY
+-- Integrity Checking with Digital Signatures
+-- return type is (Signature, B.ByteString) where the orignal string
+-- is the second element of the tuple
+createSigMsg :: B.ByteString -> IO B.ByteString
+createSigMsg msg = do
+  privK <- read <$> readFile "ssl/private.key"
+  case (sign Nothing (Nothing :: Maybe SHA512) privK msg) of
+    Left err  -> putStrLn ("error signing" <> show err) >> return B.empty
+    Right sig_m -> return $ BL.toStrict $ encode (sig_m, msg)
+#endif
