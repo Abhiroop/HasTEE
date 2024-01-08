@@ -10,6 +10,7 @@ import Data.List (groupBy, sortBy)
 
 
 import Crypto.PubKey.RSA.PKCS15
+import Crypto.PubKey.RSA.Types (PublicKey)
 import Data.Foldable (traverse_)
 import qualified Data.ByteString as B
 
@@ -129,11 +130,10 @@ sendData enc_ref_db labeledRow = do
   writeRef ref_db (labeledRow : datas)
 
 
-runQuery :: EnclaveDC (DCRef DB) -> Priv CNF -> Priv CNF -> EnclaveDC ResultEncrypted
-runQuery enc_ref_db priv1 priv2  = do
+runQuery :: EnclaveDC (DCRef DB) -> PublicKey -> Priv CNF -> Priv CNF -> EnclaveDC ResultEncrypted
+runQuery enc_ref_db pubK priv1 priv2  = do
   labeled_rows <- join $ readRef <$> enc_ref_db
   rows         <- mapM (unlabelFunc priv1 priv2) labeled_rows
-  pubK         <- liftIO $ read <$> readFile "ssl/public.key"
   res_enc      <- liftIO $ encrypt pubK (B.toStrict $ encode $ query1 rows)
   case res_enc of
     Left err -> do
@@ -246,9 +246,10 @@ ifctest = do
   db <- liftNewRef dcPublic database -- db kept permissive because all
                                      -- data is labeled
   sfunc    <- inEnclave initState $ sendData db
+  pubK     <- liftIO $ read <$> readFile "ssl/public.key"
   org1Priv <- liftIO $ privInit (toCNF org1)
   org2Priv <- liftIO $ privInit (toCNF org2)
-  qfunc    <- inEnclave initState $ runQuery db org1Priv org2Priv
+  qfunc    <- inEnclave initState $ runQuery db pubK org1Priv org2Priv
   let api = API sfunc qfunc
   runClient (client1 api)
   runClient (client2 api)
