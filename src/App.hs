@@ -1,4 +1,6 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, StaticPointers #-}
+{-# LANGUAGE GADTs, GeneralizedNewtypeDeriving, StaticPointers #-}
+
+
 module App (module App) where
 
 import Control.Monad.IO.Class
@@ -8,6 +10,10 @@ import Data.ByteString.Lazy(ByteString, append, length, fromStrict)
 import Data.Binary(Binary, encode, decode)
 import Data.Maybe(fromMaybe)
 import Network.Simple.TCP
+
+import Data.Dynamic
+import DCLabel
+import qualified Data.Binary as B
 
 {-@ The EnclaveIFC API for programmers
 
@@ -24,11 +30,8 @@ inEnclaveConstant :: a -> App (Enclave a)
 -- create an escape hatch that can be used however many times you want
 inEnclave :: Securable a => a -> App (Secure a)
 
--- create an escape hatch that can be used only a specific amount of times
-ntimes :: Securable a => Int -> a -> App (Secure a)
-
 -- use the below function to introduce the Client monad
-runClient :: Client () -> App Done
+runClient :: Client a -> App Done
 
 
 -- use the 3 functions below to talk to the enclave
@@ -51,16 +54,17 @@ runApp :: App a -> IO a
 @-}
 
 
+type Identifier = String
 type CallID = Int
 type Method = [ByteString] -> IO (Maybe ByteString)
-type AppState = (CallID, [(CallID, Method)])
+type AppState = (CallID, [(CallID, Method)], Identifier)
 newtype App a = App (StateT AppState IO a)
   deriving (Functor, Applicative, Monad, MonadIO)
 
 data Done = Done
 
-initAppState :: AppState
-initAppState = (0,[])
+initAppState :: Identifier -> AppState
+initAppState str = (0,[], str)
 
 -- Client-enclave communication utils follow
 
@@ -94,3 +98,34 @@ readTCPSocket socket = do
   return $ fromStrict $ fromMaybe err msgBody
   where
     err = error "Error parsing request"
+
+
+-- | Internal state of an 'LIO' computation.
+data LIOState l p = LIOState { lioLabel     :: !l -- ^ Current label.
+                             , lioClearance :: !l -- ^ Current clearance.
+                             , lioOutLabel  :: !l -- ^ Public channel label
+                             , lioPrivilege :: Priv p -- ^ Monad initialised with privilege p
+                             } deriving (Eq, Show, Typeable)
+
+
+-- | A common default starting state, where @'lioLabel' = 'dcPublic'@
+-- and @'lioClearance' = False '%%' True@ (i.e., the highest
+-- possible clearance).
+dcDefaultState :: p -> LIOState DCLabel p
+dcDefaultState p = LIOState { lioLabel     = dcPublic
+                            , lioClearance = False %% True
+                            , lioOutLabel  = dcPublic
+                            , lioPrivilege = PrivTCB p
+                            }
+
+-- data Labeled l t = LabeledTCB !l t deriving Typeable
+
+data Labeled l t where
+  LabeledTCB :: (Binary l, Binary t) => l -> t -> Labeled l t
+
+instance (Binary l, Binary t) => Binary (Labeled l t) where
+  put (LabeledTCB l t) = B.put l >> B.put t
+  get = do
+    l <- B.get
+    t <- B.get
+    return (LabeledTCB l t)
