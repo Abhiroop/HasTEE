@@ -11,7 +11,7 @@ homepage:       https://github.com/Abhiroop/HasTEE#readme
 bug-reports:    https://github.com/Abhiroop/HasTEE/issues
 author:         Abhiroop Sarkar
 maintainer:     sarkara@chalmers.se
-copyright:      2022 Abhiroop Sarkar here
+copyright:      2022 Abhiroop Sarkar
 license:        BSD3
 license-file:   LICENSE
 build-type:     Simple
