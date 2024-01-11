@@ -42,6 +42,9 @@ Follow the above order - run enclave first and then the client. The enclave is s
 cabal exec which EnclaveIFC-exe
 ```
 
+#### Client integrity check
+Enabled with `-fintegrity-check`. Disabled by default. Works with the `mbed-tls` version.
+
 
 #### Using stack
 
