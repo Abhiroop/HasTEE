@@ -44,6 +44,4 @@ cabal exec which EnclaveIFC-exe
 ```
 
 #### Client integrity check
-Enabled with `-fintegrity-check`. Disabled by default. Works with the `mbed-tls` version.
-```
-
+Enabled with `-fintegrity-check`. Disabled by default. Works with the `mbed-tls`-based Remote Attestation protocol.
