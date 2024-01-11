@@ -45,20 +45,5 @@ cabal exec which EnclaveIFC-exe
 
 #### Client integrity check
 Enabled with `-fintegrity-check`. Disabled by default. Works with the `mbed-tls` version.
-
-
-#### Using stack (DO NOT USE stack)
-
-LATEST: DO NOT USE `stack`. Stick to `cabal`, all recent developments have been done with `cabal`
-
-Very hard (or impossible) to make the latest `stack` pick up a custom GHC because of the snapshot mechanism (perhaps that requires all the necessary packages be compiled with the custom GHC). Approaches in this thread https://github.com/commercialhaskell/stack/issues/725#issuecomment-364624897 are no longer functional in the latest `stack` incarnations.
-
-```
--- Build and run the enclave (the flag is called `enclave`)
-stack build --flag EnclaveIFC:enclave
-.stack-work/install/x86_64-linux-tinfo6/16c183811171455bbb9119194450e5a4a4679f74605e9f4e1a47fbd54088f2b5/9.2.5/bin/EnclaveIFC-exe
-
--- Build and run the client (default build is for client)
-stack run EnclaveIFC-exe
 ```
 
