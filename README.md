@@ -46,7 +46,7 @@ cabal exec which EnclaveIFC-exe
 Enabled with `-fintegrity-check`. Disabled by default. Works with the `mbed-tls` version.
 
 
-#### Using stack
+#### Using stack (DO NOT USE stack)
 
 LATEST: DO NOT USE `stack`. Stick to `cabal`, all recent developments have been done with `cabal`
 
