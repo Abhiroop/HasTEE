@@ -1,4 +1,4 @@
-For running on an actual SGX machine, the following fixes are required (very minimal):
+For running the benchmarks on an actual SGX machine, the following fixes are required (very minimal):
 
 ```
 diff --git a/EnclaveIFC.cabal b/EnclaveIFC.cabal
