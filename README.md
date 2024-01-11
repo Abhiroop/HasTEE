@@ -23,13 +23,14 @@ For running on Intel SGX-enabled machines there are two complex dependencies. No
 
 NOTE: The current `cabal.project` expects the trusted GHC at a particular location. For building this on your local machine that doesn't have SGX or the custom GHC, use - `cabal build --project-file=cabal-nosgx.project`.
 
-The executable supports conditional compilation and can compile into 2 binaries
+The program is compiled n times for n binaries
 #### Using cabal
 ```
 -- For the enclave
 cabal run -f enclave
 
 -- For the client
+-- `runAppRA "client1"...` should match the type-level string captured by the Client monad
 cabal run
 ```
 
