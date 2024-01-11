@@ -6,12 +6,12 @@ cabal-version: 1.12
 
 name:           EnclaveIFC
 version:        0.1.0.0
-description:    Please see the README on GitHub at <https://github.com/Abhiroop/EnclaveIFC#readme>
-homepage:       https://github.com/Abhiroop/EnclaveIFC#readme
-bug-reports:    https://github.com/Abhiroop/EnclaveIFC/issues
-author:         Author name here
-maintainer:     example@example.com
-copyright:      2022 Author name here
+description:    Please see the README on GitHub at <https://github.com/Abhiroop/HasTEE#readme>
+homepage:       https://github.com/Abhiroop/HasTEE#readme
+bug-reports:    https://github.com/Abhiroop/HasTEE/issues
+author:         Abhiroop Sarkar
+maintainer:     sarkara@chalmers.se
+copyright:      2022 Abhiroop Sarkar here
 license:        BSD3
 license-file:   LICENSE
 build-type:     Simple
