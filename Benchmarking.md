@@ -25,6 +25,8 @@ diff --git a/src/Client.hs b/src/Client.hs
 
 The trusted GHC runtime is a patched version of GHC 8.8 and the `crypton` package is a later fork of `cryptonite`. So, it's better to switch to the old `cryptonite`. The last change uses EPID-based remote attestation.
 
+For reproducing the benchmarks in paper 2, simply substitute `app/Main.hs` with [Benchmark.hs](https://github.com/Abhiroop/HasTEE/blob/master/app/Benchmark.hs). This depends on the `clock` package seen above and implements a timing combinator to report the API timing in milliseconds.
+
 #### mbedtls setup
 
 In the root of the project, creating a directory named `ssl`. Place this `ca_config.conf` file inside `ssl`:
