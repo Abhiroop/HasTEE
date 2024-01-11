@@ -1,7 +1,14 @@
 
-# EnclaveIFC
+# HasTEE⁺
 
-Can we use IFC policies to stop enclave programs from doing silly things?
+A Haskell DSL for programming Trusted Execution Environments (TEEs).
+
+Papers on HasTEE⁺:
+
+[HasTEE: Programming Trusted Execution Environments with Haskell](https://dl.acm.org/doi/10.1145/3609026.3609731) - Version 1 of the DSL.
+
+HasTEE⁺: Confidential Cloud Computing and Analytics with Haskell - Submitted to ESORICS 2024, ArXiV link coming soon. Version 2 of the DSL.
+
 
 ### Building
 
@@ -29,7 +36,9 @@ cabal exec which EnclaveIFC-exe
 
 #### Using stack
 
-Very hard (or impossible) to make the latest `stack` pick up a custom GHC because of the snapshot mechanism (perhaps that requires all the necessary packages be compiled with the custom ghc). Approaches in this thread https://github.com/commercialhaskell/stack/issues/725#issuecomment-364624897 are no longer functional in the latest `stack` incarnations.
+LATEST: DO NOT USE `stack`. Stick to `cabal`, all recent developments have been done with `cabal`
+
+Very hard (or impossible) to make the latest `stack` pick up a custom GHC because of the snapshot mechanism (perhaps that requires all the necessary packages be compiled with the custom GHC). Approaches in this thread https://github.com/commercialhaskell/stack/issues/725#issuecomment-364624897 are no longer functional in the latest `stack` incarnations.
 
 ```
 -- Build and run the enclave (the flag is called `enclave`)
