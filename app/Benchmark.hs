@@ -3,6 +3,7 @@
 
 module Benchmark where
 
+import Control.Monad(replicateM)
 import Control.Monad.IO.Class(liftIO)
 
 import App
@@ -61,5 +62,5 @@ timeItmsec ioa = do
 
 main :: IO ()
 main = do
-  res <- timeItmsec $ runApp "client" ifctest -- switch to runAppRA with gatewayRA
+  res <- replicateM 50 $ timeItmsec $ runApp "client" ifctest -- switch to runAppRA with gatewayRA
   return $ res `seq` ()
