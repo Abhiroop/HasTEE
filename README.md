@@ -9,7 +9,7 @@ See `app/Main.hs` and the `examples` directory for sample programs.
 
 [HasTEE: Programming Trusted Execution Environments with Haskell](https://dl.acm.org/doi/10.1145/3609026.3609731) - Version 1 of the DSL.
 
-HasTEE⁺: Confidential Cloud Computing and Analytics with Haskell - Submitted to ESORICS 2024, ArXiV link coming soon. Version 2 of the DSL.
+[HasTEE⁺: Confidential Cloud Computing and Analytics with Haskell](https://arxiv.org/abs/2401.08901) - Submitted to ESORICS 2024. Current version of the DSL.
 
 
 ### Building
