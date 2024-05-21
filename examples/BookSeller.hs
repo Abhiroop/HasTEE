@@ -10,7 +10,12 @@ import qualified Data.Map as Map
 import Data.Maybe (fromJust)
 import Prelude hiding (lookup)
 
+
+#ifdef ENCLAVE
+import Enclave
+#else
 import Client
+#endif
 
 type Price = Int
 type Day = Int
@@ -42,18 +47,17 @@ bookseller = do
     remoteRef <- liftNewRef defaultBooks        :: App (Enclave (Ref BookStore))
     getPrice  <- inEnclave (getPrice remoteRef) :: App (Secure (String -> Enclave Price))
     getDay    <- inEnclave (getDay remoteRef)   :: App (Secure (String -> Enclave Day))
+    
     runClient $ do
-        liftIO $ putStrLn "Enter the title of the book to buy"
+        liftIO    $ putStrLn "Enter the title of the book to buy"
         userInput <- liftIO getLine
-        price <- gateway (getPrice <@> userInput) :: Client Price
+        price     <- gateway (getPrice <@> userInput) :: Client Price
 
-        if price < budget
-            then do
-                day <- gateway (getDay <@> userInput) :: Client Day
-                -- should this modify the enclave state, removing the book from the list?
-                liftIO . putStrLn $ "The book will be delivered on " <> show day
-            else do
-                liftIO $ putStrLn "The book's price is out of the budget!"
+        if price < budget then do
+            day    <- gateway (getDay <@> userInput) :: Client Day
+            liftIO $ putStrLn $ "The book will be delivered on " <> show day
+        else do
+            liftIO $ putStrLn "The book's price is out of the budget!"
 
 main :: IO ()
 main = do
