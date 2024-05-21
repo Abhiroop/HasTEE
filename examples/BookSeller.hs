@@ -8,37 +8,29 @@ import Control.Monad.IO.Class (liftIO)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (fromJust)
-import Data.Time
-import System.Exit (exitFailure)
 import Prelude hiding (lookup)
 
 import Client
 
-dayToInt :: Day -> Integer
-dayToInt = toModifiedJulianDay
+type Price = Int
+type Day = Int
+type BookStore = Map String (Price, Day)
+storeLookup :: Enclave (Ref BookStore) -> String -> Enclave (Price, Day)
+storeLookup books book =
+    fromJust . Map.lookup book
+        <$> (readRef =<< books)
 
-intToDay :: Integer -> Day
-intToDay = ModifiedJulianDay
+getPrice :: Enclave (Ref BookStore) -> String -> Enclave Price
+getPrice books book = fst <$> storeLookup books book
 
-type BookStore = Map String (Int, Day)
-storeLookup :: Enclave (Ref BookStore) -> String -> Enclave (Maybe (Int, Day))
-storeLookup books book = do
-    lookup <- flip Map.lookup <$> (readRef =<< books)
-    case lookup book of
-        Just res -> pure $ Just res
-        Nothing -> pure Nothing
-
-getPrice :: Enclave (Ref BookStore) -> String -> Enclave (Maybe Int)
-getPrice books book = fmap fst <$> storeLookup books book
-
-getDay :: Enclave (Ref BookStore) -> String -> Enclave (Maybe Integer)
-getDay books book = fmap (dayToInt . snd) <$> storeLookup books book
+getDay :: Enclave (Ref BookStore) -> String -> Enclave Day
+getDay books book = snd <$> storeLookup books book
 
 defaultBooks :: BookStore
 defaultBooks =
     Map.fromList
-        [ ("Types and Programming Languages", (80, fromGregorian 2022 12 19))
-        , ("Homotopy Type Theory", (120, fromGregorian 2023 01 01))
+        [ ("Types and Programming Languages", (80, 20221219))
+        , ("Homotopy Type Theory", (120, 20230101))
         ]
 
 -- Maybe remove this and let app have a state?
@@ -47,18 +39,17 @@ budget = 100
 
 bookseller :: App Done
 bookseller = do
-    remoteRef <- liftNewRef defaultBooks :: App (Enclave (Ref BookStore))
-    getPrice <- inEnclave $ getPrice remoteRef
-    getDay <- inEnclave $ getDay remoteRef
+    remoteRef <- liftNewRef defaultBooks        :: App (Enclave (Ref BookStore))
+    getPrice  <- inEnclave (getPrice remoteRef) :: App (Secure (String -> Enclave Price))
+    getDay    <- inEnclave (getDay remoteRef)   :: App (Secure (String -> Enclave Day))
     runClient $ do
         liftIO $ putStrLn "Enter the title of the book to buy"
         userInput <- liftIO getLine
-        priceRes <- gateway (getPrice <@> userInput)
-        price <- liftIO $ maybe (putStrLn "non-existent book" >> exitFailure) pure priceRes
+        price <- gateway (getPrice <@> userInput) :: Client Price
 
         if price < budget
             then do
-                day <- intToDay . fromJust <$> gateway (getDay <@> userInput)
+                day <- gateway (getDay <@> userInput) :: Client Day
                 -- should this modify the enclave state, removing the book from the list?
                 liftIO . putStrLn $ "The book will be delivered on " <> show day
             else do
