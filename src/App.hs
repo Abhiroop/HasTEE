@@ -1,7 +1,9 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, StaticPointers #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, StaticPointers, DerivingVia #-}
 module App (module App) where
 
 import Control.Monad.IO.Class
+--import Control.Monad.State.Class
+--import Control.Monad.State.Strict
 import Control.Monad.Trans.State.Strict
 
 import Data.ByteString.Lazy(ByteString, append, length, fromStrict)
@@ -54,7 +56,7 @@ runApp :: App a -> IO a
 type CallID = Int
 type Method = [ByteString] -> IO (Maybe ByteString)
 type AppState = (CallID, [(CallID, Method)])
-newtype App a = App (StateT AppState IO a)
+newtype App a = App {unApp :: (StateT AppState IO a)}
   deriving (Functor, Applicative, Monad, MonadIO)
 
 data Done = Done

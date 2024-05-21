@@ -39,44 +39,64 @@ instance Monad Enclave where
 
 data Secure a = SecureDummy
 
+{-# NOINLINE inEnclaveConstant #-}
+{-# RULES "HASTEERULES inEnclaveConstant/Enclave" forall (x :: a) . inEnclaveConstant x = return (return x) #-}
 inEnclaveConstant :: a -> App (Enclave a)
-inEnclaveConstant = return . return
+inEnclaveConstant _ = error "inEnclaveConstant error"
+-- inEnclaveConstant = return . return
 
+{-# NOINLINE liftNewRef #-}
+{-# RULES "HASTEERULES liftNewRef/Enclave" forall (x :: a) . liftNewRef x = App (do r <- liftIO $ newIORef x; return (return r)) #-}
 liftNewRef :: a -> App (Enclave (Ref a))
-liftNewRef a = App $ do
-  r <- liftIO $ newIORef a
-  return (return r)
+liftNewRef _ = error "liftNewRef error"
+-- liftNewRef a = App $ do
+--   r <- liftIO $ newIORef a
+--   return (return r)
 
+{-# NOINLINE newRef #-}
+{-# RULES "HASTEERULES newRef/Enclave" forall (v :: a) . newRef v = Enclave (newIORef v) #-}
 newRef :: a -> Enclave (Ref a)
-newRef x = Enclave $ newIORef x
+newRef _ = error "newRef error"
+-- newRef x = Enclave $ newIORef x
 
+{-# NOINLINE readRef #-}
+{-# RULES "HASTEERULES readRef/Enclave" forall (ref :: Ref a) . readRef ref = Enclave (readIORef ref) #-}
 readRef :: Ref a -> Enclave a
-readRef ref = Enclave $ readIORef ref
+readRef _ = error "readRef error"
+-- readRef ref = Enclave $ readIORef ref
 
+{-# NOINLINE writeRef #-}
+{-# RULES "HASTEERULES writeRef/Enclave" forall (ref :: Ref a) (v :: a) . writeRef ref v = Enclave (writeIORef ref v) #-}
 writeRef :: Ref a -> a -> Enclave ()
-writeRef ref v = Enclave $ writeIORef ref v
+writeRef _ _ = error "writeRef error"
+-- writeRef ref v = Enclave $ writeIORef ref v
 
+{-# NOINLINE inEnclave #-}
+{-# RULES "HASTEERULES inEnclave/Enclave" forall (f :: a) . inEnclave f = App (do (next_id, remotes) <- get; put (next_id + 1, (next_id, \bs -> let Enclave n = mkSecure f bs in n) : remotes); return SecureDummy) #-}
 inEnclave :: (Securable a) => a -> App (Secure a)
-inEnclave f = App $ do
-  (next_id, remotes) <- get
-  put (next_id + 1, (next_id, \bs -> let Enclave n = mkSecure f bs in n) : remotes)
-  return SecureDummy
+inEnclave _ = error "inEnclave error"
+-- inEnclave f = App $ do
+--   (next_id, remotes) <- get
+--   put (next_id + 1, (next_id, \bs -> let Enclave n = mkSecure f bs in n) : remotes)
+--   return SecureDummy
 
-ntimes :: (Securable a) => Int -> a -> App (Secure a)
-ntimes n f = App $ do
-  r <- liftIO $ newIORef n
-  (next_id, remotes) <- get
-  put (next_id + 1, (next_id, \bs ->
-    let Enclave s = do
-          c <- Enclave $ do atomicModifyIORef' r $ \i -> (i - 1, i)
-          if c > 0
-          then mkSecure f bs
-          else return Nothing
-    in s) : remotes)
+-- ntimes :: (Securable a) => Int -> a -> App (Secure a)
+-- ntimes n f = App $ do
+--   r <- liftIO $ newIORef n
+--   (next_id, remotes) <- get
+--   put (next_id + 1, (next_id, \bs ->
+--     let Enclave s = do
+--           c <- Enclave $ do atomicModifyIORef' r $ \i -> (i - 1, i)
+--           if c > 0
+--           then mkSecure f bs
+--           else return Nothing
+--     in s) : remotes)
 
 
-  return SecureDummy
+--   return SecureDummy
 
+{-# NOINLINE (<@>) #-}
+{-# RULES "HASTEERULES HASTEERULES app/Enclave" forall (closure :: Secure (a -> b)) (arg :: a) . (<@>) closure arg = error "enclave can not apply client-side closures" #-}
 (<@>) :: Binary a => Secure (a -> b) -> a -> Secure b
 (<@>) = error "Access to client not allowed"
 
@@ -92,32 +112,49 @@ instance (Binary a, Securable b) => Securable (a -> b) where
 
 data Client a = ClientDummy deriving (Functor, Applicative, Monad, MonadIO)
 
+{-# NOINLINE runClient #-}
+{-# RULES "HASTEERULES runClient/Enclave" forall (client :: Client a) . runClient client = return Done #-}
 runClient :: Client a -> App Done
-runClient _ = return Done
+runClient _ = error "runClient error"
+-- runClient _ = return Done
 
+{-# NOINLINE tryEnclave #-}
+{-# RULES "HASTEERULES tryEnclave/Enclave" forall (closure :: Binary a => Secure (Enclave a)) . tryEnclave closure = ClientDummy #-}
 tryEnclave :: (Binary a) => Secure (Enclave a) -> Client (Maybe a)
-tryEnclave _ = ClientDummy
+tryEnclave _ = error "tryEnclave error"
+-- tryEnclave _ = ClientDummy
 
+{-# NOINLINE gateway #-}
+{-# RULES "HASTEERULES gateway/Enclave" forall (closure :: Secure (Enclave a)) . gateway closure = ClientDummy #-}
 gateway :: Binary a => Secure (Enclave a) -> Client a
-gateway _ = ClientDummy
+gateway _ = error "gateway error"
+-- gateway _ = ClientDummy
 
+{-# NOINLINE unsafeOnEnclave #-}
+{-# RULES "HASTEERULES unsafeOnEnclave/Enclave" forall (closure :: Binary a => Secure (Enclave a)) . unsafeOnEnclave closure = ClientDummy #-}
 unsafeOnEnclave :: Binary a => Secure (Enclave a) -> Client a
-unsafeOnEnclave _ = ClientDummy
+unsafeOnEnclave _ = error "unsafeOnEnclave error"
+-- unsafeOnEnclave _ = ClientDummy
 
 {-@ The enclave's event loop. @-}
+{-# NOINLINE runApp #-}
+{-# RULES "HASTEERULES runApp/Enclave" forall (app :: App a) . runApp app = do (a, (_,vTable)) <- runStateT (unApp app) initAppState
+                                                                               _ <- serve (Host localhost) connectPort $
+                                                                                 \(connectionSocket, _)-> do
+                                                                                   hFlush stdout
+                                                                                   req <- readTCPSocket connectionSocket
+                                                                                   onEvent vTable req connectionSocket
+                                                                               return a #-}
 runApp :: App a -> IO a
-runApp (App s) = do
-  (a, (_, vTable)) <- runStateT s initAppState
-  {- BLOCKING HERE -}
-  _ <- serve (Host localhost) connectPort $
-    \(connectionSocket, remoteAddr) -> do
-      -- debug log
-      putStrLn $ "TCP connection established from " ++ show remoteAddr
-      hFlush stdout -- Gramine prints only if stdout is flushed
-      req <- readTCPSocket connectionSocket
-      onEvent vTable req connectionSocket
-  {- BLOCKING ENDS -}
-  return a -- the a is irrelevant
+runApp _ = error "runApp error"
+-- runApp (App s) = do
+--   (a, (_, vTable)) <- runStateT s initAppState
+--   _ <- serve (Host localhost) connectPort $
+--     \(connectionSocket, remoteAddr) -> do
+--       hFlush stdout
+--       req <- readTCPSocket connectionSocket
+--       onEvent vTable req connectionSocket
+--   return a
 
 
 

@@ -45,6 +45,7 @@ library
     , bytestring
     , network-simple
     , transformers
+    , mtl
   default-language: Haskell2010
   if (flag(enclave))
     cpp-options: -DENCLAVE
@@ -61,7 +62,7 @@ executable EnclaveIFC-exe
       Paths_EnclaveIFC
   hs-source-dirs:
       app
-  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
+  ghc-options: -ddump-rule-firings -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       EnclaveIFC
     , base >=4.7 && <5
