@@ -81,5 +81,7 @@ tryEnclave (Secure identifier args) = do
 gateway :: Binary a => Secure (Enclave a) -> Client a
 gateway closure = fromJust <$> tryEnclave closure
 
-runApp :: App a -> IO a
-runApp (App s) = evalStateT s initAppState
+runApp :: App Done -> IO ()
+runApp (App s) = do
+  Done <- evalStateT s initAppState
+  return ()

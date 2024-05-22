@@ -136,25 +136,24 @@ unsafeOnEnclave :: Binary a => Secure (Enclave a) -> Client a
 unsafeOnEnclave _ = error "unsafeOnEnclave error"
 -- unsafeOnEnclave _ = ClientDummy
 
-{-@ The enclave's event loop. @-}
 {-# NOINLINE runApp #-}
-{-# RULES "HASTEERULES runApp/Enclave" forall (app :: App a) . runApp app = do (a, (_,vTable)) <- runStateT (unApp app) initAppState
-                                                                               _ <- serve (Host localhost) connectPort $
-                                                                                 \(connectionSocket, _)-> do
-                                                                                   hFlush stdout
-                                                                                   req <- readTCPSocket connectionSocket
-                                                                                   onEvent vTable req connectionSocket
-                                                                               return a #-}
-runApp :: App a -> IO a
-runApp _ = error "runApp error"
+{-# RULES "HASTEERULES runApp/Enclave" forall (app :: App Done) . runApp app = do (_, (_,vTable)) <- runStateT (unApp app) initAppState
+                                                                                  _ <- serve (Host localhost) connectPort $
+                                                                                    \(connectionSocket, _)-> do
+                                                                                      hFlush stdout
+                                                                                      req <- readTCPSocket connectionSocket
+                                                                                      onEvent vTable req connectionSocket
+                                                                                  return () #-}
+runApp :: App Done -> IO ()
+runApp _ = putStrLn "I am not supposed to execute" -- return ()
 -- runApp (App s) = do
---   (a, (_, vTable)) <- runStateT s initAppState
+--   (_, (_, vTable)) <- runStateT s initAppState
 --   _ <- serve (Host localhost) connectPort $
 --     \(connectionSocket, remoteAddr) -> do
 --       hFlush stdout
 --       req <- readTCPSocket connectionSocket
 --       onEvent vTable req connectionSocket
---   return a
+--   return ()
 
 
 
@@ -181,3 +180,55 @@ onEvent mapping incoming socket = do
 -- to encode or not encode the message body but then the type
 -- will become an actual dependent type. (Keep it simple!)
 
+
+{-#
+
+
+Rule fired: Class op put (BUILTIN)
+Rule fired: Class op get (BUILTIN)
+Rule fired: USPEC $fEqList @Char (GHC.Classes)
+Rule fired: Class op fmap (BUILTIN)
+Rule fired: eqString (GHC.Base)
+Rule fired: Class op >>= (BUILTIN)
+Rule fired: Class op >>= (BUILTIN)
+Rule fired: Class op >> (BUILTIN)
+Rule fired: HASTEERULES runClient/Enclave (Enclave)
+Rule fired: HASTEERULES inEnclave/Enclave (Enclave)
+Rule fired: unpack (GHC.Base)
+Rule fired: HASTEERULES inEnclaveConstant/Enclave (Enclave)
+Rule fired: Class op >> (BUILTIN)
+Rule fired: unpack (GHC.Base)
+Rule fired: Class op >>= (BUILTIN)
+Rule fired: +# (BUILTIN)
+Rule fired: unpack-list (GHC.Base)
+Rule fired: unpack-list (GHC.Base)
+
+
+
+Rule fired: Class op put (BUILTIN)
+Rule fired: Class op get (BUILTIN)
+Rule fired: USPEC $fEqList @Char (GHC.Classes)
+Rule fired: Class op fmap (BUILTIN)
+Rule fired: eqString (GHC.Base)
+Rule fired: Class op >>= (BUILTIN)
+Rule fired: Class op >>= (BUILTIN)
+Rule fired: Class op >> (BUILTIN)
+Rule fired: HASTEERULES runClient/Enclave (Enclave)
+Rule fired: HASTEERULES inEnclave/Enclave (Enclave)
+Rule fired: unpack (GHC.Base)
+Rule fired: HASTEERULES inEnclaveConstant/Enclave (Enclave)
+Rule fired: Class op >> (BUILTIN)
+Rule fired: unpack (GHC.Base)
+Rule fired: Class op >>= (BUILTIN)
+Rule fired: HASTEERULES runApp/Enclave (Enclave)
+Rule fired: Class op >> (BUILTIN)
+Rule fired: unpack (GHC.Base)
+Rule fired: Class op return (BUILTIN)
+Rule fired: unpack-list (GHC.Base)
+Rule fired: unpack-list (GHC.Base)
+Rule fired: unpack-list (GHC.Base)
+Rule fired: unpack-list (GHC.Base)
+Rule fired: +# (BUILTIN)
+
+
+#-}

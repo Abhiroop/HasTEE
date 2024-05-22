@@ -31,8 +31,8 @@ library
   exposed-modules:
       App
       Client
-      Security.Lattice
-      Security.Sec
+--      Security.Lattice
+--      Security.Sec
       Enclave
   other-modules:
       Paths_EnclaveIFC
@@ -54,12 +54,6 @@ library
 
 executable EnclaveIFC-exe
   main-is: Main.hs
-  other-modules:
-      Lattice
-      Program
-      Sec
-      SecIO
-      Paths_EnclaveIFC
   hs-source-dirs:
       app
   ghc-options: -ddump-rule-firings -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N

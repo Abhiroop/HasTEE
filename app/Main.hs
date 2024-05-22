@@ -10,7 +10,7 @@ import Enclave
 #else
 import Client
 #endif
-
+ 
 pwdChkr :: Enclave String -> String -> Enclave Bool
 pwdChkr pwd guess = fmap (== guess) pwd
 
@@ -28,5 +28,7 @@ passwordChecker = do
 
 main :: IO ()
 main = do
+  putStrLn "before"
   res <- runApp passwordChecker
+  putStrLn "after"
   return $ res `seq` ()
