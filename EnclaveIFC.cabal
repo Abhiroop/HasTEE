@@ -54,9 +54,10 @@ library
     cpp-options: -DUMMY
 
 executable EnclaveIFC-exe
-  main-is: Main.hs
+  main-is: BookSeller.hs
   hs-source-dirs:
-      app
+      --app
+      examples
   ghc-options: -fplugin=Plugin -ddump-rule-firings -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       EnclaveIFC
@@ -67,6 +68,7 @@ executable EnclaveIFC-exe
     , transformers
     , ghc
     , syb
+    , containers
   default-language: Haskell2010
   if (flag(enclave))
     cpp-options: -DENCLAVE
