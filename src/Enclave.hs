@@ -47,6 +47,9 @@ import Crypto.Hash.Algorithms (SHA512)
 import Crypto.PubKey.RSA.PKCS15
 #endif
 
+
+import Debug.Trace
+
 {- FLOATING LABEL Information Flow Control
    The floating is bounded by a clearance label. Bell
    and La Padula formalized clearance as a bound on
@@ -427,8 +430,8 @@ type LocTy = Symbol
 data Client (l :: LocTy) a = ClientDummy
   deriving (Functor, Applicative, Monad, MonadIO)
 
-runClient :: Client l a -> App Done
-runClient _ = return Done
+runClient :: Client l a -> App (Maybe a)
+runClient _ = return Nothing
 
 tryEnclave :: (Binary a) => Secure (Enclave l p a) -> Client loc (Maybe a)
 tryEnclave _ = ClientDummy

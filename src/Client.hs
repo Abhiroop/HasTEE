@@ -203,14 +203,14 @@ instance (KnownSymbol l) => Monad (Client l) where
 instance (KnownSymbol l) => MonadIO (Client l) where
   liftIO = Client Proxy . liftIO
 
-runClient :: Client l a -> App Done
+runClient :: Client l a -> App (Maybe a)
 runClient (Client loc cl) = App $ do
   (_, _, loctm) <- get
   if ((toLocTm loc) == loctm)
   then do
     v <- liftIO cl
-    return $ v `seq` Done
-  else return Done -- cl not executed
+    return (Just v)
+  else return Nothing -- cl not executed
 
 
 

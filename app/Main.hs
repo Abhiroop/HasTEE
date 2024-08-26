@@ -1,18 +1,12 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DataKinds #-}
-
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE InstanceSigs #-}
 module Main where
 
-import Control.Monad.IO.Class (liftIO)
-import Control.Monad (join)
+import Control.Monad.IO.Class
 import Data.Binary
-import Data.List (groupBy, sortBy)
-
-
-import Crypto.PubKey.RSA.PKCS15
-import Crypto.PubKey.RSA.Types (PublicKey)
-import Data.Foldable (traverse_)
-import qualified Data.ByteString as B
+import GHC.Generics (Generic)
 
 import App
 import DCLabel
@@ -22,242 +16,305 @@ import Enclave
 import Client
 #endif
 
+import Test.QuickCheck
+import Test.QuickCheck.Monadic
+import qualified Data.Map as M
 
-{-@ COVID Variant and Age Correlation
-
-    There are 3 organisations;
-    org1 and org2 are the data provider and org3 carries out the analytics.
-    Analytics combines ONLY the covid strains common between org1 and org2
-    and gives the mean infected age associated with that strain.
-    Because org1 and org2 are providing confidential data they uses the new
-    ```
-    clientLabel :: (Label l , Binary l , Binary a)
-                => l -> a -> Labeled l a
-    ```
-    function to label the data from the client side.
-    The database at the server side only holds labeled data.
-    Because this is confidental data; no one is allowed to
-    declassify this. There is only one analytics query audited and approved
-    by org1 and org2, which is `query1` and only this query is capable of
-    declassification. The declassification happens with the `runQuery`
-    special function that captures org1 and org2's declassification privilege
-    within a closure.
-
-    org3 wishes to run the analytics `query1` and when the partitioning
-    happens we can ensure that the `privInit` part of the code is
-    compiled out. Ideally proper partitioning should eliminate client1's
-    `dataProvider` DCLabel that captures the underlying representation
-    of the privilege. We take the dynamic approach a la HasChor. But this is
-    handled easily with a symmetric encryption key that org1 holds.
-
-    Also, one shouldn't use strings in DCLabels as well as Privileges.
-    512 bit hashes should be used. A DC Label should be of the form
-    type DCLabel = Hash
-    where hash :: Hash
-          hash = hash (hash secrecy, hash integrity)
-
-    Problem
-    -------
-    Anyone who calls `runQ :: Secure (EnclaveDC Result)` gets the analytics
-    result, that can partially (or sometimes entirely) reveal the
-    confidential data.
-    Solution
-    --------
-    Public-Private cryptography
-    runQ :: Secure (EnclaveDC Hash)
-    runQ should internally do `encrpyt org3_pubK result` and now
-    except org3, no one can decrypt this data as they dont have the private
-    key. org3 can do `decrypt org3_privK result`
+data ClaimCause =
+  VehicleAccident | VehicleVandalism |
+  HomeFire | HomeTheft | PropertyDamage
+  deriving (Ord, Show, Eq, Generic)
 
 
+data FraudDetection = Regression | DecisionTree | SVM
+  deriving (Show, Eq, Generic)
 
+type TPS = Int -- transaction per second
+
+data Location = C1 | C2 | C3 | C4 deriving (Ord, Show, Eq, Generic)
+
+data FraudHistory =
+  FraudHistory { claimCause           :: ClaimCause
+               , detectionMethod      :: FraudDetection
+               , transactionFrequency :: TPS
+               , location             :: Location
+               }
+  deriving (Show, Eq, Generic)
+
+instance Binary ClaimCause
+instance Binary FraudDetection
+instance Binary Location
+instance Binary FraudHistory
+
+type UserId      = Int
+type ClaimId     = Int
+type ClaimAmount = Int
+
+data InsuranceData = InsuranceData { userId       :: UserId
+                                   , claimId      :: ClaimId
+                                   , claimAmount  :: ClaimAmount
+                                   , fraudHistory :: FraudHistory
+                                   }
+                     deriving (Show, Eq, Generic)
+
+instance Binary InsuranceData
+
+instance Arbitrary InsuranceData where
+  arbitrary :: Gen InsuranceData
+  arbitrary = do
+    uid <- choose (1, 10000)
+    cid <- choose (1, 100000)
+    let reasonableClaim = choose (10000, claimAmountThreshold)
+    let fraudClaim =
+          choose (claimAmountThreshold + 1, 2 * claimAmountThreshold)
+    cA <- frequency [(3, reasonableClaim), (1, fraudClaim)]
+    fraudHist <- arbitrary
+    return (InsuranceData uid cid cA fraudHist)
+
+instance Arbitrary FraudHistory where
+  arbitrary :: Gen FraudHistory
+  arbitrary = do
+    cCause <- arbitrary
+    dMeth  <- arbitrary
+    tFreq  <- arbitrary `suchThat` (\tps -> tps > 100 && tps < 1000)
+    loc    <- arbitrary
+    return (FraudHistory cCause dMeth tFreq loc)
+
+instance Arbitrary ClaimCause where
+  arbitrary :: Gen ClaimCause
+  arbitrary = oneof [ return VehicleAccident
+                    , return VehicleVandalism
+                    , return HomeFire
+                    , return HomeTheft
+                    , return PropertyDamage]
+
+instance Arbitrary Location where
+  arbitrary :: Gen Location
+  arbitrary = oneof [ return C1, return C2
+                    , return C3, return C4]
+
+instance Arbitrary FraudDetection where
+  arbitrary :: Gen FraudDetection
+  arbitrary = frequency [ (3, return SVM)
+                        , (2, return DecisionTree)
+                        , (1, return Regression)]
+
+
+{-@
+    This is a database of fraudulent claims collected
+    from various insurance organisations I1, I2, I3.
 @-}
+type DB = [InsuranceData]
 
-data CovidVariant = BA275
-                  | XBB15
-                  | DV71
-                  | B1525
-                  | P681
-                  | B318
-                  deriving (Show, Eq, Ord)
+fraudDB :: DB
+fraudDB = []
 
-instance Binary CovidVariant where
-  put variant = case variant of
-    BA275 -> putWord8 0
-    XBB15 -> putWord8 1
-    DV71  -> putWord8 2
-    B1525 -> putWord8 3
-    P681  -> putWord8 4
-    B318  -> putWord8 5
+collect :: EnclaveDC (DCRef DB) -> InsuranceData -> EnclaveDC ()
+collect enc_ref_db idata = do
+  ref_db <- enc_ref_db
+  datas  <- readRef ref_db
+  writeRef ref_db (idata : datas)
 
-  get = do
-    tag <- getWord8
-    case tag of
-      0 -> return BA275
-      1 -> return XBB15
-      2 -> return DV71
-      3 -> return B1525
-      4 -> return P681
-      5 -> return B318
-      _ -> fail "Invalid tag for CovidVariant"
+batchCollect :: EnclaveDC (DCRef DB) -> [InsuranceData] -> EnclaveDC ()
+batchCollect enc_ref_db idatas = do
+  ref_db <- enc_ref_db
+  datas  <- readRef ref_db
+  writeRef ref_db (idatas ++ datas)
 
+data PotentialFraudData =
+  PotentialFraudData { fraud_uid        :: UserId
+                     , fraud_claimAmt   :: ClaimAmount
+                     , fraud_claimCause :: ClaimCause
+                     , fraud_tps        :: TPS
+                     , fraud_loc        :: Location
+                     }
+  deriving (Show, Eq, Generic)
 
-type Age = Word8
-data Row = Row { covidVar   :: CovidVariant
-               , patientAge :: Age
-               } deriving (Show, Eq)
+instance Binary PotentialFraudData
 
-instance Binary Row where
-  put (Row var age) = put var >> put age
+instance Arbitrary PotentialFraudData where
+  arbitrary :: Gen PotentialFraudData
+  arbitrary = do
+    f_uid        <- choose (1, 10000)
+    f_claimAmt   <- choose (claimAmountThreshold + 1
+                               , 2 * claimAmountThreshold)
+    f_claimCause <- arbitrary
+    f_tps <- arbitrary `suchThat` (\tps -> tps > 100 && tps < 1000)
+    f_loc <- arbitrary
+    return PotentialFraudData { fraud_uid        = f_uid
+                              , fraud_claimAmt   = f_claimAmt
+                              , fraud_claimCause = f_claimCause
+                              , fraud_tps = f_tps
+                              , fraud_loc = f_loc
+                              }
 
-  get = do
-    var <- get
-    age <- get
-    return (Row var age)
+{-@ Mock Fraud Detection Algorithm
+    The algorithm assigns a score based on
+    1. history of previous fraud
+    2. claim amount
+    3. claim cause and detection method accuracy
+    4. transaction frequency
+    5. location
+    If the score exceeds a particular threshold we
+    say positive or negative for fraud
+@-}
+fraudDetect :: EnclaveDC (DCRef DB)
+            -> PotentialFraudData
+            -> EnclaveDC Bool
+fraudDetect enc_ref_db fraud_data = do
+  ref_db <- enc_ref_db
+  datas  <- readRef ref_db
+  let score1 = fraudHistScore  datas fraud_data
+  let score2 = claimAmountCheck      fraud_data
+  let score3 = claimCauseCheck datas fraud_data
+  let score4 = tranFreqCheck   datas fraud_data
+  let score5 = locCheck        datas fraud_data
+  let meanScore =
+        fromIntegral (score1 + score2 +
+                      score3 + score4 + score5) / 5.0 :: Double
+  -- 0.8 <= mean score <= 2.6
+  if meanScore >= 2.0
+  then pure True
+  else pure False
 
+fraudHistScore :: [InsuranceData] -> PotentialFraudData -> Int
+fraudHistScore datas fraud_data =
+  case getUser datas (fraud_uid fraud_data) of
+    Nothing -> 0
+    Just _  -> 1
 
-type DB     = [DCLabeled Row]
-type Result = [(CovidVariant, Age)] -- gives rounded up mean age
-type ResultEncrypted = B.ByteString
+claimAmountThreshold :: Int
+claimAmountThreshold = 100000
 
-database :: DB
-database = []
+claimAmountCheck :: PotentialFraudData -> Int
+claimAmountCheck fraud_data
+  | (fraud_claimAmt fraud_data) > claimAmountThreshold = 2
+  | otherwise = 0
 
-sendData :: EnclaveDC (DCRef DB) -> DCLabeled Row -> EnclaveDC ()
-sendData enc_ref_db labeledRow = do
-  ref_db     <- enc_ref_db
-  datas      <- readRef ref_db
-  writeRef ref_db (labeledRow : datas)
+claimCauseCheck :: [InsuranceData] -> PotentialFraudData -> Int
+claimCauseCheck datas fraud_data =
+  let cCauseMap =
+        foldr (\(InsuranceData _ _ _ fH) m ->
+           M.insertWith (\_ (oldVal, fd) -> (oldVal + 1, fd))
+           (claimCause fH) (1, detectionMethod fH) m)
+        (M.empty :: M.Map ClaimCause (Int, FraudDetection)) datas
+   in case M.lookup (fraud_claimCause fraud_data) cCauseMap of
+        Nothing -> 0
+        Just (v, detMeth) -> if (v > 5)
+                             then 2 + detectionRanking detMeth
+                             else 1 + detectionRanking detMeth
 
+detectionRanking :: FraudDetection -> Int
+detectionRanking SVM          = 3
+detectionRanking DecisionTree = 2
+detectionRanking Regression   = 1
 
-runQuery :: EnclaveDC (DCRef DB) -> PublicKey -> Priv CNF -> Priv CNF -> EnclaveDC ResultEncrypted
-runQuery enc_ref_db pubK priv1 priv2  = do
-  labeled_rows <- join $ readRef <$> enc_ref_db
-  rows         <- mapM (unlabelFunc priv1 priv2) labeled_rows
-  res_enc      <- liftIO $ encrypt pubK (B.toStrict $ encode $ query1 rows)
-  case res_enc of
-    Left err -> do
-      liftIO $ putStrLn (show err)
-      return B.empty
-    Right bytestr -> return bytestr
+tranFreqCheck :: [InsuranceData] -> PotentialFraudData -> Int
+tranFreqCheck datas fraud_data =
+  case getUser datas (fraud_uid fraud_data) of
+    Nothing -> 1
+    Just (InsuranceData _ _ _ fH) ->
+      if (fraud_tps fraud_data) >= (transactionFrequency fH) then 3 else 2
 
-unlabelFunc :: Priv CNF -> Priv CNF -> DCLabeled Row -> EnclaveDC Row
-unlabelFunc p1 p2 lrow =
-  case orgName of
-    "org1" -> unlabelP p1 lrow
-    "org2" -> unlabelP p2 lrow
-    _      -> unlabel lrow -- label will float
+getUser :: [InsuranceData] -> UserId -> Maybe InsuranceData
+getUser datas u_id
+  | length res == 0 = Nothing
+  | otherwise       = Just (head res)
   where
-    dclabel = labelOf lrow
-    orgName = extractOrgName dclabel
+    res = filter (\idata -> (userId idata) == u_id) datas
 
-extractOrgName :: DCLabel -> String
-extractOrgName dclabel =
-  if dcSecrecy dclabel == dcIntegrity dclabel
-  then filter (/= '"') $ show $ dcSecrecy dclabel
-  else show dclabel
+locCheck :: [InsuranceData] -> PotentialFraudData -> Int
+locCheck datas fraud_data =
+  let locFreqMap =
+        foldr (\(InsuranceData _ _ _ fH) m ->
+           M.insertWith (\_ oldVal -> oldVal + 1) (location fH) 1 m)
+        (M.empty :: M.Map Location Int) datas
+   in case M.lookup (fraud_loc fraud_data) locFreqMap of
+        Nothing -> 0
+        Just v  -> if (v > 20) then 2 else 1
 
-query1 :: [Row] -> Result
-query1 = map collate
-       . filter (\rs -> length rs > 1)
-       . groupBy (\(Row cov1 _) (Row cov2 _) -> cov1 == cov2)
-       . sortBy  (\(Row cov1 _) (Row cov2 _) -> compare cov1 cov2)
-  where
-    collate :: [Row] -> (CovidVariant, Age)
-    collate rows = (covidVar (head rows), meanAge)
-      where meanAge = sum (map patientAge rows) `div` (fromIntegral $ length rows)
 
+-- batchCollect :: EnclaveDC (DCRef DB) -> [InsuranceData]    -> EnclaveDC ()
+-- fraudDetect  :: EnclaveDC (DCRef DB) -> PotentialFraudData -> EnclaveDC Bool
 
 data API =
-  API { datasend :: Secure (DCLabeled Row -> EnclaveDC ())
-      , runQ     :: Secure (EnclaveDC ResultEncrypted)
+  API { datasend :: Secure ([InsuranceData] -> EnclaveDC ())
+      , runQ     :: Secure (PotentialFraudData -> EnclaveDC Bool)
       }
 
 
-client1 :: API -> Client "org1" ()
-client1 api = do
-  labeledDs <- mapM (clientLabel dataProvider)
-               [row1, row2, row3, row4, row5, row6]
-  traverse_ (\lRow -> gatewayRA ((datasend api) <@> lRow)) labeledDs
-  where
-    dataProvider :: DCLabel
-    dataProvider = "org1" %% "org1"
+-- this is where the random data generation and testing should happen
+prop_NI :: [InsuranceData]
+        -> PotentialFraudData
+        -> PotentialFraudData
+        -> Property
+prop_NI ids pfd1 pfd2 = monadicIO $ do
+  (res1, res2) <- run $ runAppRA "testClient" $ do
+    db    <- liftNewRef dcPublic fraudDB
+    let initState = dcDefaultState cTrue
+    sfunc <- inEnclave initState $ batchCollect db
+    qfunc <- inEnclave initState $ fraudDetect  db
+    let api = API sfunc qfunc
+    {- Sends private data -}
+    _  <- runClient (testClientCollect api ids)
+    {- Query first time (public query) -}
+    r1 <- runClient (testClientQuery api pfd1)
+    {- Query second time (public query) -}
+    r2 <- runClient (testClientQuery api pfd2)
+    return (r1, r2)
+  assert (res1 == res2)
+{-
 
-client2 :: API -> Client "org2" ()
-client2 api = do
-  labeledDs <- mapM (clientLabel dataProvider)
-               [row7, row8, row9, row10]
-  traverse_ (\lRow -> gatewayRA ((datasend api) <@> lRow)) labeledDs
-  where
-    dataProvider :: DCLabel
-    dataProvider = "org2" %% "org2"
-
-
-
-client3 :: API -> Client "org3" ()
-client3 api = do
-  res_enc <- gatewayRA (runQ api)
-  privK   <- liftIO $ read <$> readFile "ssl/private.key"
-  res     <- liftIO $ decryptSafer privK res_enc
-  case res of
-    Left err -> liftIO $ putStrLn $ show err
-    Right bytestr -> do
-      let result = decode (B.fromStrict bytestr) :: Result
-      liftIO $ putStrLn "Analytics result"
-      liftIO $ putStrLn (show result)
-
--- Assume rows are fetched from the database
--- org1 rows
-row1, row2, row3 :: Row
-row4, row5, row6 :: Row
-
-row1 = Row XBB15 77
-row2 = Row BA275 57
-row3 = Row DV71  39
-row4 = Row XBB15 82
-row5 = Row BA275 53
-row6 = Row B1525 37
-
--- org2 rows
-row7, row8, row9, row10 :: Row
-
-row7  = Row XBB15 83
-row8  = Row BA275 52
-row9  = Row P681  22
-row10 = Row B318 32
-
-type OrgName = String
-
--- data provider
-org1 :: OrgName
-org1 = "org1"
-
--- data provider
-org2 :: OrgName
-org2 = "org2"
-
--- analytics provider
-org3 :: OrgName
-org3 = "org3"
+[]
+PotentialFraudData {fraud_uid = 2813, fraud_claimAmt = 171528, fraud_claimCause = HomeFire, fraud_tps = 101, fraud_loc = C4}
+PotentialFraudData {fraud_uid = 730, fraud_claimAmt = 161041, fraud_claimCause = HomeTheft, fraud_tps = 102, fraud_loc = C4}
 
 
-ifctest :: App Done
-ifctest = do
-  db <- liftNewRef dcPublic database -- db kept permissive because all
-                                     -- data is labeled
-  sfunc    <- inEnclave initState $ sendData db
-  pubK     <- liftIO $ read <$> readFile "ssl/public.key"
-  org1Priv <- liftIO $ privInit (toCNF org1)
-  org2Priv <- liftIO $ privInit (toCNF org2)
-  qfunc    <- inEnclave initState $ runQuery db pubK org1Priv org2Priv
-  let api = API sfunc qfunc
-  runClient (client1 api)
-  runClient (client2 api)
-  runClient (client3 api)
-  where
-    initState = dcDefaultState cTrue
+
+[]
+PotentialFraudData {fraud_uid = 1885, fraud_claimAmt = 197068, fraud_claimCause = HomeTheft, fraud_tps = 105, fraud_loc = C2}
+PotentialFraudData {fraud_uid = 42,   fraud_claimAmt = 104722, fraud_claimCause = HomeTheft, fraud_tps = 105, fraud_loc = C2}
+
+-}
+
+
+
+testClientCollect :: API -> [InsuranceData] -> Client "testClient" ()
+testClientCollect api ids = gatewayRA ((datasend api) <@> ids)
+
+testClientQuery :: API -> PotentialFraudData -> Client "testClient" Bool
+testClientQuery api fraud_data = gatewayRA ((runQ api) <@> fraud_data)
+
+
+
+
+testClient :: API -> Client "testClient" ()
+testClient api = do
+  gatewayRA ((datasend api) <@> [(InsuranceData 1 1 100 (FraudHistory VehicleAccident SVM 100 C1))])
+  fraudTest <- gatewayRA ((runQ api) <@> (PotentialFraudData 1 100 PropertyDamage 100 C1))
+  if fraudTest
+  then liftIO $ putStrLn "Fraud Detected"
+  else liftIO $ putStrLn "Fraud not found!"
 
 main :: IO ()
-main = do
-  res <- runAppRA org1 ifctest
-  return $ res `seq` ()
+main = quickCheck prop_NI
+
+
+
+-------------------------NOT IMPORTANT--------------------------------
+
+type Public = Int
+type Private = Bool
+
+testProg :: Public -> Private -> Public
+testProg pub priv =
+  if priv
+  then pub + 2
+  else pub - 2
+
+propNI2 :: Public -> Private -> Private -> Bool
+propNI2 pub priv1 priv2 =
+  testProg pub priv1 == testProg pub priv2
+
+-- main :: IO ()
+-- main = quickCheck propNI2

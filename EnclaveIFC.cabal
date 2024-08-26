@@ -54,6 +54,7 @@ library
     , containers
     , network-simple
     , transformers
+    , QuickCheck
   default-language: Haskell2010
   if (flag(enclave))
     cpp-options: -DENCLAVE
@@ -181,6 +182,7 @@ executable EnclaveIFC-exe
     , crypton
     , network-simple
     , transformers
+    , QuickCheck
   default-language: Haskell2010
   if (flag(enclave))
     cpp-options: -DENCLAVE
