@@ -278,6 +278,63 @@ PotentialFraudData {fraud_uid = 42,   fraud_claimAmt = 104722, fraud_claimCause 
 -}
 
 
+prop_NI' :: [InsuranceData]
+         -> [InsuranceData]
+         -> PotentialFraudData
+         -> Property
+prop_NI' ids1 ids2 pfd = monadicIO $ do
+  res1 <- run $ runAppRA "testClient" $ do
+    api <- setup
+    {- Sends first private data -}
+    _  <- runClient (testClientCollect api ids1)
+    {- Query first time (same public query) -}
+    r1 <- runClient (testClientQuery api pfd)
+    return r1
+  res2 <- run $ runAppRA "testClient" $ do
+    api <- setup
+    {- Sends second private data -}
+    _  <- runClient (testClientCollect api ids2)
+    {- Query second time (same public query) -}
+    r2 <- runClient (testClientQuery api pfd)
+    return r2
+  assert (res1 == res2)
+  where
+    setup :: App API
+    setup = do
+      db    <- liftNewRef dcPublic fraudDB
+      let initState = dcDefaultState cTrue
+      sfunc <- inEnclave initState $ batchCollect db
+      qfunc <- inEnclave initState $ fraudDetect  db
+      return (API sfunc qfunc)
+
+
+
+
+
+
+
+
+
+prop_nonempty_db_NI :: PotentialFraudData
+                    -> PotentialFraudData
+                    -> Property
+prop_nonempty_db_NI pfd1 pfd2 = forAll (arbitrary `suchThat` (\idts -> length idts > 5 && length idts < 10)) $ \ids -> monadicIO $ do
+  (res1, res2) <- run $ runAppRA "testClient" $ do
+    db    <- liftNewRef dcPublic fraudDB
+    let initState = dcDefaultState cTrue
+    sfunc <- inEnclave initState $ batchCollect db
+    qfunc <- inEnclave initState $ fraudDetect  db
+    let api = API sfunc qfunc
+    {- Sends private data -}
+    _  <- runClient (testClientCollect api ids)
+    {- Query first time (public query) -}
+    r1 <- runClient (testClientQuery api pfd1)
+    {- Query second time (public query) -}
+    r2 <- runClient (testClientQuery api pfd2)
+    return (r1, r2)
+  assert (res1 == res2)
+
+
 
 testClientCollect :: API -> [InsuranceData] -> Client "testClient" ()
 testClientCollect api ids = gatewayRA ((datasend api) <@> ids)
@@ -297,7 +354,7 @@ testClient api = do
   else liftIO $ putStrLn "Fraud not found!"
 
 main :: IO ()
-main = quickCheck prop_NI
+main = quickCheck prop_NI'
 
 
 
