@@ -519,7 +519,7 @@ byteStrLength cptr = go 0 []
       go (i + 1) ((fromEnum cchar):xs)
 
 dataPacketSize :: Int
-dataPacketSize = 1024
+dataPacketSize = 1024 * 30
 
 runAppRA :: Identifier -> App a -> IO a
 runAppRA ident (App s) = do

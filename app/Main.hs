@@ -20,6 +20,130 @@ import Test.QuickCheck
 import Test.QuickCheck.Monadic
 import qualified Data.Map as M
 
+type Private = Bool
+type Public = Int
+
+foo :: Private -> Public -> Public
+foo priv pub =
+  if priv
+  then pub + 10
+  else pub * 10
+
+prop_NI1 :: Public -> Private -> Private -> Bool
+prop_NI1 pub priv1 priv2 =
+  foo priv1 pub == foo priv2 pub
+
+-- main :: IO ()
+-- main = quickCheck prop_NI1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+times2Plus1 :: Int -> Int
+times2Plus1 v = 2 * v + 1
+
+test_me1 :: Int -> [Int] -> Success
+test_me1 _ []  = Pass
+test_me1 _ [x] = Pass
+test_me1 x p@(a:b:as)
+  | x > 0 && (times2Plus1 x == a) && b == a = Error
+  | otherwise = Pass
+
+data Success = Pass | Error deriving (Eq, Show)
+
+prop_Pass :: Int -> [Int] -> Bool
+prop_Pass x xs = test_me1 x xs == Pass
+
+main = quickCheck prop_Pass2
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+test_me :: Int -> IWrapper -> Success
+test_me x iwrapper = test_me1 x (ints iwrapper)
+
+prop_test_me :: Int -> IWrapper -> Bool
+prop_test_me x xs = (test_me x xs == Pass)
+
+prop_Pass2 :: PWrapper -> Bool
+prop_Pass2 pw = let (x, iw) = p pw
+                in prop_test_me x iw
+
+
+newtype IWrapper = IWrapper { ints :: [Int] } deriving (Show, Eq)
+
+newtype PWrapper = PWrapper { p :: (Int, IWrapper) } deriving (Show, Eq)
+
+instance Arbitrary IWrapper where
+  arbitrary = IWrapper <$>
+    genPosListInt `suchThat` (\xs -> let (a:b:_) = xs in a == b)
+    where
+      genPosInt = arbitrary `suchThat` (> 0)
+
+      genPosListInt = listOf genPosInt `suchThat` ((> 1) . length)
+
+instance Arbitrary PWrapper where
+  arbitrary = do
+    x        <- arbitrary `suchThat` (> 0)
+    iwrapper <- arbitrary `suchThat` ((times2Plus1 x ==) . head . ints)
+    PWrapper <$> pure (x, iwrapper)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 data ClaimCause =
   VehicleAccident | VehicleVandalism |
   HomeFire | HomeTheft | PropertyDamage
@@ -243,18 +367,12 @@ data API =
       }
 
 
--- this is where the random data generation and testing should happen
-prop_NI :: [InsuranceData]
-        -> PotentialFraudData
-        -> PotentialFraudData
-        -> Property
-prop_NI ids pfd1 pfd2 = monadicIO $ do
+prop_Fuzz :: PotentialFraudData
+          -> PotentialFraudData
+          -> Property
+prop_Fuzz pfd1 pfd2 = forAll genPub $ \ids -> monadicIO $ do
   (res1, res2) <- run $ runAppRA "testClient" $ do
-    db    <- liftNewRef dcPublic fraudDB
-    let initState = dcDefaultState cTrue
-    sfunc <- inEnclave initState $ batchCollect db
-    qfunc <- inEnclave initState $ fraudDetect  db
-    let api = API sfunc qfunc
+    api <- setup
     {- Sends private data -}
     _  <- runClient (testClientCollect api ids)
     {- Query first time (public query) -}
@@ -263,26 +381,35 @@ prop_NI ids pfd1 pfd2 = monadicIO $ do
     r2 <- runClient (testClientQuery api pfd2)
     return (r1, r2)
   assert (res1 == res2)
+  where
+    genPub :: Gen [InsuranceData]
+    genPub = genListUpToN 2
+
+    setup :: App API
+    setup = do
+      db    <- liftNewRef dcPublic fraudDB
+      let initState = dcDefaultState cTrue
+      sfunc <- inEnclave initState $ batchCollect db
+      qfunc <- inEnclave initState $ fraudDetect  db
+      return (API sfunc qfunc)
+
+
+
+
 {-
 
+PotentialFraudData {fraud_uid = 7142, fraud_claimAmt = 108186, fraud_claimCause = VehicleVandalism, fraud_tps = 112, fraud_loc = C2}
+PotentialFraudData {fraud_uid = 3853, fraud_claimAmt = 90771, fraud_claimCause = VehicleVandalism, fraud_tps = 105, fraud_loc = C1}
 []
-PotentialFraudData {fraud_uid = 2813, fraud_claimAmt = 171528, fraud_claimCause = HomeFire, fraud_tps = 101, fraud_loc = C4}
-PotentialFraudData {fraud_uid = 730, fraud_claimAmt = 161041, fraud_claimCause = HomeTheft, fraud_tps = 102, fraud_loc = C4}
-
-
-
-[]
-PotentialFraudData {fraud_uid = 1885, fraud_claimAmt = 197068, fraud_claimCause = HomeTheft, fraud_tps = 105, fraud_loc = C2}
-PotentialFraudData {fraud_uid = 42,   fraud_claimAmt = 104722, fraud_claimCause = HomeTheft, fraud_tps = 105, fraud_loc = C2}
 
 -}
 
 
-prop_NI' :: [InsuranceData]
-         -> [InsuranceData]
-         -> PotentialFraudData
-         -> Property
-prop_NI' ids1 ids2 pfd = monadicIO $ do
+prop_NI :: [InsuranceData]
+        -> [InsuranceData]
+        -> PotentialFraudData
+        -> Property
+prop_NI ids1 ids2 pfd = monadicIO $ do
   res1 <- run $ runAppRA "testClient" $ do
     api <- setup
     {- Sends first private data -}
@@ -307,10 +434,50 @@ prop_NI' ids1 ids2 pfd = monadicIO $ do
       qfunc <- inEnclave initState $ fraudDetect  db
       return (API sfunc qfunc)
 
+testClientCollect :: API -> [InsuranceData] -> Client "testClient" ()
+testClientCollect api ids = gatewayRA ((datasend api) <@> ids)
+
+testClientQuery :: API -> PotentialFraudData -> Client "testClient" Bool
+testClientQuery api fraud_data = gatewayRA ((runQ api) <@> fraud_data)
 
 
 
+prop_NI' :: PotentialFraudData -> Property
+prop_NI' pfd = forAll genPriv $ \(ids1, ids2) -> monadicIO $ do
+  res1 <- run $ runAppRA "testClient" $ do
+    api <- setup
+    {- Sends first private data -}
+    _  <- runClient (testClientCollect api ids1)
+    {- Query first time (same public query) -}
+    r1 <- runClient (testClientQuery api pfd)
+    return r1
+  res2 <- run $ runAppRA "testClient" $ do
+    api <- setup
+    {- Sends second private data -}
+    _  <- runClient (testClientCollect api ids2)
+    {- Query second time (same public query) -}
+    r2 <- runClient (testClientQuery api pfd)
+    return r2
+  assert (res1 == res2)
+  where
+    setup :: App API
+    setup = do
+      db    <- liftNewRef dcPublic fraudDB
+      let initState = dcDefaultState cTrue
+      sfunc <- inEnclave initState $ batchCollect db
+      qfunc <- inEnclave initState $ fraudDetect  db
+      return (API sfunc qfunc)
+    genPriv :: Gen ([InsuranceData], [InsuranceData])
+    genPriv = do
+      id1 <- genListUpToN 2
+      id2 <- genListUpToN 2
+      pure (id1, id2)
 
+
+genListUpToN :: Arbitrary a => Int -> Gen [a]
+genListUpToN n = do
+  len <- choose (0, n)
+  vectorOf len arbitrary
 
 
 
@@ -336,42 +503,33 @@ prop_nonempty_db_NI pfd1 pfd2 = forAll (arbitrary `suchThat` (\idts -> length id
 
 
 
-testClientCollect :: API -> [InsuranceData] -> Client "testClient" ()
-testClientCollect api ids = gatewayRA ((datasend api) <@> ids)
-
-testClientQuery :: API -> PotentialFraudData -> Client "testClient" Bool
-testClientQuery api fraud_data = gatewayRA ((runQ api) <@> fraud_data)
-
-
-
-
 testClient :: API -> Client "testClient" ()
 testClient api = do
-  gatewayRA ((datasend api) <@> [(InsuranceData 1 1 100 (FraudHistory VehicleAccident SVM 100 C1))])
-  fraudTest <- gatewayRA ((runQ api) <@> (PotentialFraudData 1 100 PropertyDamage 100 C1))
+  gatewayRA ((datasend api) <@> [InsuranceData {userId = 9782, claimId = 33264, claimAmount = 24533, fraudHistory = FraudHistory {claimCause = PropertyDamage, detectionMethod = DecisionTree, transactionFrequency = 102, location = C3}},InsuranceData {userId = 5101, claimId = 19193, claimAmount = 14630, fraudHistory = FraudHistory {claimCause = HomeFire, detectionMethod = SVM, transactionFrequency = 104, location = C1}},InsuranceData {userId = 905, claimId = 86051, claimAmount = 25351, fraudHistory = FraudHistory {claimCause = VehicleVandalism, detectionMethod = DecisionTree, transactionFrequency = 101, location = C4}}])
+  fraudTest <- gatewayRA ((runQ api) <@> (PotentialFraudData {fraud_uid = 7597, fraud_claimAmt = 199473, fraud_claimCause = HomeFire, fraud_tps = 105, fraud_loc = C1}))
   if fraudTest
   then liftIO $ putStrLn "Fraud Detected"
   else liftIO $ putStrLn "Fraud not found!"
 
-main :: IO ()
-main = quickCheck prop_NI'
 
 
+app :: App (Maybe ())
+app = do
+  db    <- liftNewRef dcPublic fraudDB
+  let initState = dcDefaultState cTrue
+  sfunc <- inEnclave initState $ batchCollect db
+  qfunc <- inEnclave initState $ fraudDetect  db
+  let api = API sfunc qfunc
+  runClient (testClient api)
 
--------------------------NOT IMPORTANT--------------------------------
-
-type Public = Int
-type Private = Bool
-
-testProg :: Public -> Private -> Public
-testProg pub priv =
-  if priv
-  then pub + 2
-  else pub - 2
-
-propNI2 :: Public -> Private -> Private -> Bool
-propNI2 pub priv1 priv2 =
-  testProg pub priv1 == testProg pub priv2
 
 -- main :: IO ()
--- main = quickCheck propNI2
+-- main = do
+--   res <- runAppRA "testClient" app
+--   return $ res `seq` ()
+
+-- main :: IO ()
+-- main = quickCheckWith stdArgs { maxSuccess = 1000 } prop_NI'
+-- main = quickCheck prop_NI'
+-- main = quickCheck prop_Fuzz
+
