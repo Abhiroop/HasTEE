@@ -1,6 +1,7 @@
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE ScopedTypeVariables, RankNTypes, TypeApplications #-}
 {-# LANGUAGE DataKinds, KindSignatures #-}
 {-# OPTIONS_GHC -Wno-missing-methods #-}
@@ -34,6 +35,7 @@ import Foreign.C
 import Foreign.Marshal.Alloc
 import Foreign.Ptr
 import Foreign.Storable
+import GHC.Generics
 import GHC.IO.Handle.Text
 
 import Control.Monad (ap, unless)
@@ -46,6 +48,8 @@ import GHC.TypeLits
 import Crypto.Hash.Algorithms (SHA512)
 import Crypto.PubKey.RSA.PKCS15
 #endif
+
+
 
 {- FLOATING LABEL Information Flow Control
    The floating is bounded by a clearance label. Bell
@@ -78,11 +82,15 @@ instance (Label l) => MonadIO (Enclave l p) where
     s <- readIORef ioref
     -- | Dynamic Check before IO operation
     unless ((lioLabel s) `canFlowTo` (lioOutLabel s)) $
-      error "IO operation to public channel not permitted"
+      throw $ WriteOutException "IO operation to public channel not permitted"
     -- | Run IO computation
     a <- io
     -- | Return result
     return a
+
+data IFCException = WriteOutException String -- other exceptions can be added
+  deriving (Show, Generic, Exception)
+
 
 getLIOStateTCB :: Enclave l p (LIOState l p)
 getLIOStateTCB = Enclave readIORef
@@ -518,6 +526,13 @@ byteStrLength cptr = go 0 []
 dataPacketSize :: Int
 dataPacketSize = 1024
 
+-- Magic number
+-- If there are more than 10 retry attempts
+-- after catching IFC violations it is not
+-- worth attempting anymore.
+retryNum :: Int
+retryNum = 10
+
 runAppRA :: Identifier -> App a -> IO a
 runAppRA ident (App s) = do
   (a, (_, vTable, _)) <- runStateT s (initAppState ident)
@@ -526,15 +541,34 @@ runAppRA ident (App s) = do
   poke flagptr 0
   tid <- myThreadId
   _   <- forkIO (ffiComp tid flagptr dataptr)
-  result <-
-    try (loop vTable flagptr dataptr) :: IO (Either SomeException ())
-  case result of
-    Left e  -> putStrLn $ "Caught exception : " ++ show e
-    Right _ -> putStrLn "Exited loop with C server termination"
-  free flagptr
-  free dataptr
+  loopWithRetry retryNum vTable flagptr dataptr
+  -- result <-
+  --   try (loop vTable flagptr dataptr) :: IO (Either SomeException ())
+  -- case result of
+  --   Left e  -> putStrLn $ "Caught exception : " ++ show e
+  --   Right _ -> putStrLn "Exited loop with C server termination"
+  -- free flagptr
+  -- free dataptr
   return a
   where
+    loopWithRetry :: Int -> [(CallID, Method)] -> Ptr CInt -> Ptr CChar -> IO ()
+    loopWithRetry 0 _ fptr dptr = do
+      putStrLn "Too many retries; killing application"
+      free fptr
+      free dptr
+    loopWithRetry n vTable fptr dptr =
+      loop vTable fptr dptr `catch` handler
+      where
+        handler :: IFCException -> IO ()
+        handler (WriteOutException str) = do
+          putStrLn $ "Caught IFCException: " ++ str
+          -- Resetting flap ptr and data ptr
+          poke fptr 0
+          memsetToZero dptr dataPacketSize
+          putStrLn "Retrying..."
+          -- Retry the loop
+          loopWithRetry (n - 1) vTable fptr dptr
+
     loop :: [(CallID, Method)] -> Ptr CInt -> Ptr CChar -> IO ()
     loop vTable fptr dptr = do
       int_val <- peek fptr

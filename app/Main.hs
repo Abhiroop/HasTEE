@@ -141,15 +141,16 @@ runQuery enc_ref_db pubK priv1 priv2  = do
       return B.empty
     Right bytestr -> return bytestr
 
+-- | Declassification
 unlabelFunc :: Priv CNF -> Priv CNF -> DCLabeled Row -> EnclaveDC Row
-unlabelFunc p1 p2 lrow =
-  case orgName of
-    "org1" -> unlabelP p1 lrow
-    "org2" -> unlabelP p2 lrow
-    _      -> unlabel lrow -- label will float
-  where
-    dclabel = labelOf lrow
-    orgName = extractOrgName dclabel
+unlabelFunc p1 p2 lrow = unlabel lrow
+  -- case orgName of
+  --   "org1" -> unlabelP p1 lrow
+  --   "org2" -> unlabelP p2 lrow
+  --   _      -> unlabel lrow -- label will float
+  -- where
+  --   dclabel = labelOf lrow
+  --   orgName = extractOrgName dclabel
 
 extractOrgName :: DCLabel -> String
 extractOrgName dclabel =
@@ -259,5 +260,5 @@ ifctest = do
 
 main :: IO ()
 main = do
-  res <- runAppRA org1 ifctest
+  res <- runAppRA org3 ifctest
   return $ res `seq` ()
