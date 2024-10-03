@@ -562,7 +562,7 @@ runAppRA ident (App s) = do
         handler :: IFCException -> IO ()
         handler (WriteOutException str) = do
           putStrLn $ "Caught IFCException: " ++ str
-          -- Resetting flap ptr and data ptr
+          -- Resetting flag ptr and data ptr
           poke fptr 0
           memsetToZero dptr dataPacketSize
           putStrLn "Retrying..."
