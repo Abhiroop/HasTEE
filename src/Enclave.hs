@@ -49,7 +49,8 @@ import Crypto.Hash.Algorithms (SHA512)
 import Crypto.PubKey.RSA.PKCS15
 #endif
 
-
+import Data.List (intercalate)
+import System.IO (withFile, IOMode(..))
 
 {- FLOATING LABEL Information Flow Control
    The floating is bounded by a clearance label. Bell
@@ -533,8 +534,29 @@ dataPacketSize = 1024
 retryNum :: Int
 retryNum = 10
 
+{-@ NOTE 1
+
+When bootstrapping the enclave with a public key
+I assume there is some file format that is bootstrapped
+which tells the enclave, which clients can be trusted
+and for what operation. For simplicity, I am using
+the isAuthorized function now and hardcoding a client
+name in this function; but I assume there should be
+some legit file format like yaml and parsing around it.
+There should also be a concept of revocation.
+
+@-}
+-- SEE NOTE 1 above
+logAuthorizedClients :: IO ()
+logAuthorizedClients = do
+  ctimestamp <- getTimeStamp
+  let logstr = "@" <> show ctimestamp <> "     isAuthorized(\"client3\")"
+  withFile logFile AppendMode $ \hdl -> do
+    hPutStrLn hdl logstr
+
 runAppRA :: Identifier -> App a -> IO a
 runAppRA ident (App s) = do
+  logAuthorizedClients
   (a, (_, vTable, _)) <- runStateT s (initAppState ident)
   flagptr  <- malloc :: IO (Ptr CInt)
   dataptr  <- mallocBytes dataPacketSize :: IO (Ptr CChar)
@@ -669,3 +691,54 @@ sigVerification sigmsg = do
   then return $ Just (BL.fromStrict m)
   else return $ Nothing
 #endif
+
+
+
+
+
+-- Tracing
+
+logFile :: FilePath
+logFile = "calltrace.log"
+
+type TraceString = String
+
+-- XXX: Prone to attack by feeding malicious timestamp
+foreign import ccall "time"
+    c_time :: Ptr CTime -> IO CTime
+
+getTimeStamp :: IO CTime
+getTimeStamp = do
+  currentTimePtr <- malloc :: IO (Ptr CTime)
+  _ <- c_time currentTimePtr
+  currentTime <- peek currentTimePtr
+  free currentTimePtr
+  return currentTime
+
+-- XXX: Currently unused
+-- Gramine allows a way to monitor syscalls as well
+traceSysCall :: String -> [String] -> IO ()
+traceSysCall syscall args = do
+  ctimestamp <- getTimeStamp
+  let logstr = "@" <> show ctimestamp <> "     "  <>
+               syscall <> formatArgs
+  withFile logFile AppendMode $ \hdl -> do
+    hPutStrLn hdl logstr
+  where
+    formatArgs =
+      "(" <> intercalate ", " args <> ")"
+
+traceCall :: TraceString -> EnclaveDC ()
+traceCall tracestr = Enclave $ \_ -> do
+  ctimestamp <- getTimeStamp
+  let logstr = "@" <> show ctimestamp <> "     " <> tracestr
+  withFile logFile AppendMode $ \hdl -> do
+    hPutStrLn hdl logstr
+
+traceCallB :: [TraceString] -> EnclaveDC ()
+traceCallB tracestrs = Enclave $ \_ -> do
+  ctimestamp <- getTimeStamp
+  let logstr = map (\t -> "@" <> show ctimestamp <> "     " <> t) tracestrs
+  withFile logFile AppendMode $ \hdl -> do
+    hPutStrLn hdl (unlines logstr)
+

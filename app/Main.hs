@@ -101,19 +101,21 @@ instance Binary CovidVariant where
       5 -> return B318
       _ -> fail "Invalid tag for CovidVariant"
 
-
+type Party = String
 type Age = Word8
-data Row = Row { covidVar   :: CovidVariant
+data Row = Row { owner      :: Party
+               , covidVar   :: CovidVariant
                , patientAge :: Age
                } deriving (Show, Eq)
 
 instance Binary Row where
-  put (Row var age) = put var >> put age
+  put (Row o var age) = put o >> put var >> put age
 
   get = do
+    o   <- get
     var <- get
     age <- get
-    return (Row var age)
+    return (Row o var age)
 
 
 type DB     = [DCLabeled Row]
@@ -123,34 +125,59 @@ type ResultEncrypted = B.ByteString
 database :: DB
 database = []
 
-sendData :: EnclaveDC (DCRef DB) -> DCLabeled Row -> EnclaveDC ()
-sendData enc_ref_db labeledRow = do
+sendData :: EnclaveDC (DCRef DB) -> Priv CNF -> Priv CNF -> DCLabeled Row -> EnclaveDC ()
+sendData enc_ref_db p1 p2 labeledRow = do
   ref_db     <- enc_ref_db
   datas      <- readRef ref_db
+
+  -- DPBA ADDITION
+  row <- unlabelRow labeledRow
+  let traceStr =
+        "input("
+        <> (show (owner row)) <> ","
+        <> (show (patientAge row))    <> ","
+        <> (show $ show (covidVar row)) <> ")"
+  traceCall traceStr
+  -- DPBA ADDITION
   writeRef ref_db (labeledRow : datas)
+  where
+    unlabelRow = unlabelFunc p1 p2
 
 
 runQuery :: EnclaveDC (DCRef DB) -> PublicKey -> Priv CNF -> Priv CNF -> EnclaveDC ResultEncrypted
 runQuery enc_ref_db pubK priv1 priv2  = do
   labeled_rows <- join $ readRef <$> enc_ref_db
-  rows         <- mapM (unlabelFunc priv1 priv2) labeled_rows
-  res_enc      <- liftIO $ encrypt pubK (B.toStrict $ encode $ query1 rows)
+  rows         <- mapM unlabelRow labeled_rows
+  let result   = query1 rows
+  res_enc      <- liftIO $ encrypt pubK (B.toStrict $ encode result)
   case res_enc of
     Left err -> do
       liftIO $ putStrLn (show err)
       return B.empty
-    Right bytestr -> return bytestr
+    Right bytestr -> do
+      -- DPBA ADDITION
+      let outTrace =
+            map (\(cov,age) -> "output("
+                      <> show o3  <> ","
+                      <> show age <> ","
+                      <> (show $ show cov) <> ")")
+            result
+      traceCallB outTrace
+      -- DPBA ADDITION
+      return bytestr
+  where
+    unlabelRow = unlabelFunc priv1 priv2
 
 -- | Declassification
 unlabelFunc :: Priv CNF -> Priv CNF -> DCLabeled Row -> EnclaveDC Row
-unlabelFunc p1 p2 lrow = unlabel lrow
-  -- case orgName of
-  --   "org1" -> unlabelP p1 lrow
-  --   "org2" -> unlabelP p2 lrow
-  --   _      -> unlabel lrow -- label will float
-  -- where
-  --   dclabel = labelOf lrow
-  --   orgName = extractOrgName dclabel
+unlabelFunc p1 p2 lrow =
+  case orgName of
+    "org1" -> unlabelP p1 lrow
+    "org2" -> unlabelP p2 lrow
+    _      -> unlabel lrow -- label will float
+  where
+    dclabel = labelOf lrow
+    orgName = extractOrgName dclabel
 
 extractOrgName :: DCLabel -> String
 extractOrgName dclabel =
@@ -161,8 +188,8 @@ extractOrgName dclabel =
 query1 :: [Row] -> Result
 query1 = map collate
        . filter (\rs -> length rs > 1)
-       . groupBy (\(Row cov1 _) (Row cov2 _) -> cov1 == cov2)
-       . sortBy  (\(Row cov1 _) (Row cov2 _) -> compare cov1 cov2)
+       . groupBy (\(Row _ cov1 _) (Row _ cov2 _) -> cov1 == cov2)
+       . sortBy  (\(Row _ cov1 _) (Row _ cov2 _) -> compare cov1 cov2)
   where
     collate :: [Row] -> (CovidVariant, Age)
     collate rows = (covidVar (head rows), meanAge)
@@ -212,20 +239,26 @@ client3 api = do
 row1, row2, row3 :: Row
 row4, row5, row6 :: Row
 
-row1 = Row XBB15 77
-row2 = Row BA275 57
-row3 = Row DV71  39
-row4 = Row XBB15 82
-row5 = Row BA275 53
-row6 = Row B1525 37
+o1, o2, o3 :: Party
+o1 = "client1"
+o2 = "client2"
+o3 = "client3"
+
+
+row1 = Row o1 XBB15 77
+row2 = Row o1 BA275 57
+row3 = Row o1 DV71  39
+row4 = Row o1 XBB15 82
+row5 = Row o1 BA275 53
+row6 = Row o1 B1525 37
 
 -- org2 rows
 row7, row8, row9, row10 :: Row
 
-row7  = Row XBB15 83
-row8  = Row BA275 52
-row9  = Row P681  22
-row10 = Row B318 32
+row7  = Row o2 XBB15 83
+row8  = Row o2 BA275 52
+row9  = Row o2 P681  22
+row10 = Row o2 B318 32
 
 type OrgName = String
 
@@ -246,10 +279,10 @@ ifctest :: App Done
 ifctest = do
   db <- liftNewRef dcPublic database -- db kept permissive because all
                                      -- data is labeled
-  sfunc    <- inEnclave initState $ sendData db
   pubK     <- liftIO $ read <$> readFile "ssl/public.key"
   org1Priv <- liftIO $ privInit (toCNF org1)
   org2Priv <- liftIO $ privInit (toCNF org2)
+  sfunc    <- inEnclave initState $ sendData db org1Priv org2Priv
   qfunc    <- inEnclave initState $ runQuery db pubK org1Priv org2Priv
   let api = API sfunc qfunc
   runClient (client1 api)

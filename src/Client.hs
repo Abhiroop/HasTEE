@@ -303,3 +303,10 @@ createSigMsg msg = do
     Left err  -> putStrLn ("error signing" <> show err) >> return B.empty
     Right sig_m -> return $ BL.toStrict $ encode (sig_m, msg)
 #endif
+
+
+traceCall :: String -> EnclaveDC ()
+traceCall _ = EnclaveDummy
+
+traceCallB :: [String] -> EnclaveDC ()
+traceCallB _ = EnclaveDummy
