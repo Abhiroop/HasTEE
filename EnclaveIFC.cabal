@@ -53,6 +53,7 @@ library
     , bytestring
     , containers
     , network-simple
+    , random
     , transformers
   default-language: Haskell2010
   if (flag(enclave))
@@ -180,6 +181,7 @@ executable EnclaveIFC-exe
     , containers
     , crypton
     , network-simple
+    , random
     , transformers
   default-language: Haskell2010
   if (flag(enclave))

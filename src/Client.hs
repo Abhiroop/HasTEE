@@ -305,6 +305,9 @@ createSigMsg msg = do
 #endif
 
 
+addLaplacianNoiseWithSensitivity :: Double -> Double -> Double -> EnclaveDC Double
+addLaplacianNoiseWithSensitivity _ _ _ = EnclaveDummy
+
 traceCall :: String -> EnclaveDC ()
 traceCall _ = EnclaveDummy
 

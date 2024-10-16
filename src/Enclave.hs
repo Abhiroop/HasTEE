@@ -51,6 +51,7 @@ import Crypto.PubKey.RSA.PKCS15
 
 import Data.List (intercalate)
 import System.IO (withFile, IOMode(..))
+import System.Random (randomRIO)
 
 {- FLOATING LABEL Information Flow Control
    The floating is bounded by a clearance label. Bell
@@ -691,6 +692,29 @@ sigVerification sigmsg = do
   then return $ Just (BL.fromStrict m)
   else return $ Nothing
 #endif
+
+
+
+-- Differential Privacy operations
+
+-- Function to generate Laplace noise
+laplaceNoise :: Double -> IO Double
+laplaceNoise b = do
+  u <- randomRIO (-0.5, 0.5)  -- Uniform random variable between -0.5 and 0.5
+  -- See https://en.wikipedia.org/wiki/Laplace_distribution
+  -- Random variate generation
+  let noise = -b * signum u * log (1 - 2 * abs u)
+  return noise
+
+
+addLaplacianNoiseWithSensitivity :: Double -> Double -> Double -> EnclaveDC Double
+addLaplacianNoiseWithSensitivity result sensitivity epsilon = Enclave $ \_ -> do
+  let b = sensitivity / epsilon
+  noise <- laplaceNoise b
+  return (result + noise)
+
+
+--
 
 
 

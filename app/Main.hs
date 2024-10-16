@@ -103,6 +103,7 @@ instance Binary CovidVariant where
 
 type Party = String
 type Age = Word8
+type MeanAge = Double
 data Row = Row { owner      :: Party
                , covidVar   :: CovidVariant
                , patientAge :: Age
@@ -119,7 +120,7 @@ instance Binary Row where
 
 
 type DB     = [DCLabeled Row]
-type Result = [(CovidVariant, Age)] -- gives rounded up mean age
+type Result = [(CovidVariant, MeanAge)] -- mean age with noise
 type ResultEncrypted = B.ByteString
 
 database :: DB
@@ -148,7 +149,7 @@ runQuery :: EnclaveDC (DCRef DB) -> PublicKey -> Priv CNF -> Priv CNF -> Enclave
 runQuery enc_ref_db pubK priv1 priv2  = do
   labeled_rows <- join $ readRef <$> enc_ref_db
   rows         <- mapM unlabelRow labeled_rows
-  let result   = query1 rows
+  result       <- addNoise $ query1 rows
   res_enc      <- liftIO $ encrypt pubK (B.toStrict $ encode result)
   case res_enc of
     Left err -> do
@@ -168,6 +169,36 @@ runQuery enc_ref_db pubK priv1 priv2  = do
   where
     unlabelRow = unlabelFunc priv1 priv2
 
+
+
+
+addNoise :: [(CovidVariant, MeanAge, Int)] -> EnclaveDC Result
+addNoise datas =
+  mapM (\(cov, mA, s) -> addNoise' s mA >>= (\mA' -> pure (cov, mA'))) datas
+
+-- Local Sensitivity Δf = (Max Change in Age​) / (Number of entries)
+
+-- NOTE 1: Local sensitivity
+-- The maximum a record can change if we substitute
+-- one for the other, I am assuming is 100. Eg:
+-- you substitue the record of an infant (0) with a
+-- 100 year old person's covid data
+
+-- NOTE 2
+-- chose a magic epsilon number (needs tweaking)
+-- the probability of getting a certain output is
+-- at most e^epsilon times the probability of getting
+-- the output from the altered database
+
+--XXX: datasetsize should never be 0
+-- the consumer of this function insures this
+addNoise' :: Int -> MeanAge -> EnclaveDC MeanAge
+addNoise' datasetsize meanAge =
+  addLaplacianNoiseWithSensitivity meanAge sensitivity epsilon
+  where
+    sensitivity = 100.0 / (fromIntegral datasetsize :: Double) -- NOTE 1
+    epsilon = 0.9 -- NOTE 2
+
 -- | Declassification
 unlabelFunc :: Priv CNF -> Priv CNF -> DCLabeled Row -> EnclaveDC Row
 unlabelFunc p1 p2 lrow =
@@ -185,15 +216,16 @@ extractOrgName dclabel =
   then filter (/= '"') $ show $ dcSecrecy dclabel
   else show dclabel
 
-query1 :: [Row] -> Result
+query1 :: [Row] -> [(CovidVariant, MeanAge, Int)]
 query1 = map collate
        . filter (\rs -> length rs > 1)
        . groupBy (\(Row _ cov1 _) (Row _ cov2 _) -> cov1 == cov2)
        . sortBy  (\(Row _ cov1 _) (Row _ cov2 _) -> compare cov1 cov2)
   where
-    collate :: [Row] -> (CovidVariant, Age)
-    collate rows = (covidVar (head rows), meanAge)
-      where meanAge = sum (map patientAge rows) `div` (fromIntegral $ length rows)
+    collate :: [Row] -> (CovidVariant, MeanAge, Int)
+    collate rows = (covidVar (head rows), meanAge, length rows)
+      where meanAge = (fromIntegral (sum (map patientAge rows)) :: Double) /
+                      (fromIntegral $ length rows)
 
 
 data API =
