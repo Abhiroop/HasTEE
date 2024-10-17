@@ -133,12 +133,9 @@ sendData enc_ref_db p1 p2 labeledRow = do
 
   -- DPBA ADDITION
   row <- unlabelRow labeledRow
-  let traceStr =
-        "input("
-        <> (show (owner row)) <> ","
-        <> (show (patientAge row))    <> ","
-        <> (show $ show (covidVar row)) <> ")"
-  traceCall traceStr
+  traceCallI [ note (owner row)
+             , note (patientAge row)
+             , note (show (covidVar row)) ]
   -- DPBA ADDITION
   writeRef ref_db (labeledRow : datas)
   where
@@ -157,13 +154,8 @@ runQuery enc_ref_db pubK priv1 priv2  = do
       return B.empty
     Right bytestr -> do
       -- DPBA ADDITION
-      let outTrace =
-            map (\(cov,age) -> "output("
-                      <> show o3  <> ","
-                      <> show age <> ","
-                      <> (show $ show cov) <> ")")
-            result
-      traceCallB outTrace
+      mapM_ (\(cov,age) ->
+               traceCallO [note o3, note age, note (show cov)]) result
       -- DPBA ADDITION
       return bytestr
   where

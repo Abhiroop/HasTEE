@@ -9,6 +9,7 @@
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
 
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE KindSignatures #-}
 module Enclave(module Enclave) where
 
@@ -49,7 +50,7 @@ import Crypto.Hash.Algorithms (SHA512)
 import Crypto.PubKey.RSA.PKCS15
 #endif
 
-import Data.List (intercalate)
+import Data.List (intercalate, intersperse)
 import System.IO (withFile, IOMode(..))
 import System.Random (randomRIO)
 
@@ -752,6 +753,16 @@ traceSysCall syscall args = do
     formatArgs =
       "(" <> intercalate ", " args <> ")"
 
+
+data Traceable = forall a . Show a => MkTraceable a
+
+note :: Show a => a -> Traceable
+note = MkTraceable
+
+tShow :: Traceable -> String
+tShow (MkTraceable a) = show a
+
+
 traceCall :: TraceString -> EnclaveDC ()
 traceCall tracestr = Enclave $ \_ -> do
   ctimestamp <- getTimeStamp
@@ -759,10 +770,20 @@ traceCall tracestr = Enclave $ \_ -> do
   withFile logFile AppendMode $ \hdl -> do
     hPutStrLn hdl logstr
 
-traceCallB :: [TraceString] -> EnclaveDC ()
-traceCallB tracestrs = Enclave $ \_ -> do
-  ctimestamp <- getTimeStamp
-  let logstr = map (\t -> "@" <> show ctimestamp <> "     " <> t) tracestrs
-  withFile logFile AppendMode $ \hdl -> do
-    hPutStrLn hdl (unlines logstr)
+{-@
+traceCallI and traceCallO are the functions exposed to the world.
+They respectively trace input and output events. They accept a
+heterogenous list of values. Another exposed function is `note`
 
+note :: Show a => a -> Traceable
+
+If a value has a show instance, you use note to pack it into a Traceable
+@-}
+
+traceCallI :: [Traceable] -> EnclaveDC ()
+traceCallI args =
+  traceCall $ "input(" <> (concat $ intersperse "," $ map tShow args) <> ")"
+
+traceCallO :: [Traceable] -> EnclaveDC ()
+traceCallO args =
+  traceCall $ "output(" <> (concat $ intersperse "," $ map tShow args) <> ")"

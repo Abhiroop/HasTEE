@@ -308,8 +308,15 @@ createSigMsg msg = do
 addLaplacianNoiseWithSensitivity :: Double -> Double -> Double -> EnclaveDC Double
 addLaplacianNoiseWithSensitivity _ _ _ = EnclaveDummy
 
-traceCall :: String -> EnclaveDC ()
-traceCall _ = EnclaveDummy
 
-traceCallB :: [String] -> EnclaveDC ()
-traceCallB _ = EnclaveDummy
+data Traceable = TraceableDummy
+
+note :: Show a => a -> Traceable
+note _ = TraceableDummy
+
+
+traceCallI :: [Traceable] -> EnclaveDC ()
+traceCallI _ = EnclaveDummy
+
+traceCallO :: [Traceable] -> EnclaveDC ()
+traceCallO _ = EnclaveDummy
