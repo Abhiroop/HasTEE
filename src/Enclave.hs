@@ -756,11 +756,11 @@ traceSysCall syscall args = do
 
 data Traceable = forall a . Show a => MkTraceable a
 
+instance Show Traceable where
+ show (MkTraceable a) = show a
+
 note :: Show a => a -> Traceable
 note = MkTraceable
-
-tShow :: Traceable -> String
-tShow (MkTraceable a) = show a
 
 
 traceCall :: TraceString -> EnclaveDC ()
@@ -782,8 +782,8 @@ If a value has a show instance, you use note to pack it into a Traceable
 
 traceCallI :: [Traceable] -> EnclaveDC ()
 traceCallI args =
-  traceCall $ "input(" <> (concat $ intersperse "," $ map tShow args) <> ")"
+  traceCall $ "input(" <> (concat $ intersperse "," $ map show args) <> ")"
 
 traceCallO :: [Traceable] -> EnclaveDC ()
 traceCallO args =
-  traceCall $ "output(" <> (concat $ intersperse "," $ map tShow args) <> ")"
+  traceCall $ "output(" <> (concat $ intersperse "," $ map show args) <> ")"

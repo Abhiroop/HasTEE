@@ -317,5 +317,5 @@ ifctest = do
 
 main :: IO ()
 main = do
-  res <- runAppRA org3 ifctest
+  res <- runAppRA org1 ifctest
   return $ res `seq` ()
