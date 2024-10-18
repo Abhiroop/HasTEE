@@ -104,6 +104,7 @@ instance Binary CovidVariant where
 type Party = String
 type Age = Word8
 type MeanAge = Double
+type RoundMeanAge = Int -- rounds the decimal value to the closest integer
 data Row = Row { owner      :: Party
                , covidVar   :: CovidVariant
                , patientAge :: Age
@@ -120,7 +121,7 @@ instance Binary Row where
 
 
 type DB     = [DCLabeled Row]
-type Result = [(CovidVariant, MeanAge)] -- mean age with noise
+type Result = [(CovidVariant, RoundMeanAge)] -- mean age with noise
 type ResultEncrypted = B.ByteString
 
 database :: DB
@@ -166,7 +167,7 @@ runQuery enc_ref_db pubK priv1 priv2  = do
 
 addNoise :: [(CovidVariant, MeanAge, Int)] -> EnclaveDC Result
 addNoise datas =
-  mapM (\(cov, mA, s) -> addNoise' s mA >>= (\mA' -> pure (cov, mA'))) datas
+  mapM (\(cov, mA, s) -> addNoise' s mA >>= (\mA' -> pure (cov, round mA'))) datas
 
 -- Local Sensitivity Δf = (Max Change in Age​) / (Number of entries)
 
