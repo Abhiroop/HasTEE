@@ -1,3 +1,26 @@
+#### October 2024
+
+After the deprecation of [Intel EPID](https://www.intel.com/content/www/us/en/developer/articles/technical/software-security-guidance/resources/sgx-ias-using-epid-eol-timeline.html), this version has now been tested with [Intel DCAP](https://www.intel.com/content/dam/develop/public/us/en/documents/intel-sgx-dcap-ecdsa-orientation.pdf). The remote attestation framework functions nearly unaltered with DCAP.
+
+Like with EPID, DCAP requires the following changes in the Client.hs file
+
+```
+-  withCString "native" $ \cstring -> do
++  withCString "dcap" $ \cstring -> do
+```
+
+Infrastructure-wise to run with DCAP on Azure infrastructure requires installing the Azure DCAP library, which can be done as follows:
+
+```
+wget https://packages.microsoft.com/ubuntu/18.04/prod/pool/main/a/az-dcap-client/az-dcap-client_1.12.0_amd64.deb
+sudo dpkg -i az-dcap-client_1.12.0_amd64.deb
+sudo systemctl restart aesmd
+```
+
+No more Intel SPID, etc. required. Note, this warning (marked as an error) is thrown `[ERROR]: Could not retrieve environment variable for 'AZDCAP_DEBUG_LOG_LEVEL'`, which is a [known bug](https://github.com/microsoft/Azure-DCAP-Client/issues/138) in the Azure DCAP client library.
+
+
+#### January 2024
 For running the benchmarks on an actual SGX machine, the following fixes are required (very minimal):
 
 ```
@@ -58,4 +81,3 @@ Place the `mbedtls-3.2.1.tar.gz` in the folder `cbits`. Extract it and run the f
         openssl req -new -key ssl/server.key -out ssl/server.csr -config ssl/ca_config.conf
         openssl x509 -req -days 360 -in ssl/server.csr -CA ssl/ca.crt -CAkey ssl/ca.key -CAcreateserial -out ssl/server.crt
 ```
-
