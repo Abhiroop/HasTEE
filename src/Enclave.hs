@@ -749,6 +749,7 @@ traceSysCall syscall args = do
                syscall <> formatArgs
   withFile logFile AppendMode $ \hdl -> do
     hPutStrLn hdl logstr
+    hFlush hdl
   where
     formatArgs =
       "(" <> intercalate ", " args <> ")"
@@ -769,6 +770,7 @@ traceCall tracestr = Enclave $ \_ -> do
   let logstr = "@" <> show ctimestamp <> "     " <> tracestr
   withFile logFile AppendMode $ \hdl -> do
     hPutStrLn hdl logstr
+    hFlush hdl
 
 {-@
 traceCallI and traceCallO are the functions exposed to the world.
