@@ -764,6 +764,22 @@ note :: Show a => a -> Traceable
 note = MkTraceable
 
 
+
+--XXX: Strict version that works inside the enclave
+--     Not scalable as the full trace file is read
+readFile' :: FilePath -> IO String
+readFile' path = do
+    content <- readFile path
+    length content `seq` return content
+
+traceCall :: TraceString -> EnclaveDC ()
+traceCall tracestr = Enclave $ \_ -> do
+  ctimestamp <- getTimeStamp
+  let logstr = "@" <> show ctimestamp <> "     " <> tracestr
+  str <- readFile' logFile
+  writeFile logFile (str <> "\n" <> logstr)
+
+{-
 traceCall :: TraceString -> EnclaveDC ()
 traceCall tracestr = Enclave $ \_ -> do
   ctimestamp <- getTimeStamp
@@ -771,6 +787,7 @@ traceCall tracestr = Enclave $ \_ -> do
   withFile logFile AppendMode $ \hdl -> do
     hPutStrLn hdl logstr
     hFlush hdl
+-}
 
 {-@
 traceCallI and traceCallO are the functions exposed to the world.
